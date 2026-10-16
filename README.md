@@ -1,8 +1,8 @@
 ﻿# Biboo — Bilingual Books
 
-Biboo is a local-first Progressive Web Application for bilingual families. Milestone 1A provides an installable, offline-capable book-project library: create a book, choose its original and translation languages, set page dimensions, and edit or delete it later.
+Biboo is a local-first Progressive Web Application for bilingual families. It provides an installable, offline-capable book library: create a book, choose its languages, set page dimensions, and add photographs of its pages. Milestone 2A adds local file/camera import, thumbnails, larger viewing, reading-order management, and page deletion.
 
-This milestone stores book metadata only. OCR, translation, photography, sticker positioning, printable labels, and PDFs are future work.
+All metadata, original images, and thumbnails stay on the device. Perspective correction (Milestone 2B), OCR, translation, sticker positioning, printable labels, and PDFs are future work.
 
 ## Stack
 
@@ -21,13 +21,14 @@ npm run preview -- --host 127.0.0.1 --port 4173
 
 Development runs on the URL printed by Vite. The development server intentionally does not register a service worker. `build` runs the TypeScript project build, bundles the application, generates installation assets and the manifest, and produces the service worker in `dist`. `preview` serves that production output for local inspection; it is not a production hosting service.
 
-Milestone 1A was manually validated. The Milestone 1B changes have not been built, linted, or browser-tested during implementation; validate them using the commands and checks below.
+Milestone 2A has not been built, linted, or browser-tested during implementation. Run the manual checks below; no successful execution is claimed for these changes.
 
 ## Source structure
 
 - `src/app/`: MUI theme, PWA lifecycle, and fallback page.
 - `src/App.tsx`: responsive navigation, shared layout, update prompt, and editing state.
 - `src/features/books/`: book types, validation, language and dimension catalogues, repository, library, detail, and editor screens.
+- `src/features/pages/`: page/asset types, transactional repository, browser image preparation, reactive page gallery, and image URL lifecycle.
 - `src/data/database.ts`: typed Dexie schema and database version.
 - `src/main.tsx`: theme and React Router routes.
 - `public/biboo.svg`: original book-mark icon and source for generated installation assets.
@@ -41,7 +42,7 @@ The production build uses vite-plugin-pwa's `generateSW` strategy. The manifest 
 
 The existing asset generator consumes `public/biboo.svg` during build. Its `minimal-2023` preset generates 192/512-pixel application icons, a 512-pixel maskable icon, a 180-pixel Apple touch icon, and favicons. The plugin injects manifest icon entries and HTML icon links. Generated PNG/ICO assets are build products; they have not been generated or checked in during this implementation.
 
-Workbox precaches only build-owned HTML, JavaScript, CSS, icons, and fonts. Navigation fallback serves the cached shell for library/book routes. There are no runtime caching rules, data endpoints, or service-worker caches of user book data or images. User metadata lives exclusively in IndexedDB. Do not place future user uploads in `public` or `dist`; future image storage needs its own IndexedDB design.
+Workbox precaches only build-owned HTML, JavaScript, CSS, icons, and fonts. Navigation fallback serves the cached shell for library/book routes. There are no runtime caching rules, data endpoints, or service-worker caches of user book data or images. User metadata and image Blobs live exclusively in IndexedDB. Imported images are displayed through temporary object URLs, never uploaded or written into `public`/`dist`.
 
 After a successful first online production visit finishes precaching, the shell and all implemented library actions work offline. A status message reports when the first offline cache is ready. Initial access requires connectivity, and an interrupted installation may leave offline support unavailable.
 
@@ -81,7 +82,7 @@ npm run preview -- --host 127.0.0.1 --port 4173
 
 ## Local persistence
 
-The `biboo` IndexedDB database is schema version 1. The `books` store uses UUID `id` as primary key and indexes `updatedAt` for newest-first listing. Each book stores:
+The `biboo` IndexedDB database is schema version 2. The unchanged version 1 declaration and book records are preserved by an additive version 2 declaration. The `books` store uses UUID `id` as primary key and indexes `updatedAt` for newest-first listing. Each book stores:
 
 - `id`, `title`, `sourceLanguage`, `targetLanguage`
 - `widthMm`, `heightMm`
@@ -92,6 +93,64 @@ Creates use `crypto.randomUUID()` and canonical BCP 47 language tags. Edits pres
 Defaults are Dutch (Netherlands), `nl-NL`, and Portuguese (Portugal), `pt-PT`. A small language catalogue can be extended without schema changes. Titles are required and limited to 200 characters; each dimension must be a finite value from 1 to 2,000 mm, including decimal measurements. Presets include A5, A4, small and standard square books, and a landscape picture book. Measurements always describe one page. Width and height can be swapped or entered directly.
 
 Records survive reloads and application updates on the same origin and browser profile. Browser storage can still be evicted; clearing site data, uninstall behavior, private browsing, or changing browser/origin can remove or isolate the library. There is no backup/export yet. Storage failures are surfaced in the UI; failed saves retain the form values for retry. Forms save only after explicit submission. Delete requires confirmation.
+
+## Page capture and local storage (Milestone 2A)
+
+Open an existing book's **Pages** section. **Import pages** opens a multiple-file image picker. **Take a photo** uses a standard single-file input with `accept="image/*"` and `capture="environment"`. Browsers decide whether to offer the rear camera, a picker, or a choice; Import pages is always available as the regular-picker fallback. There is no camera stream or custom camera interface. Choose Cover, Interior (default), or Back cover before importing; that role applies to the next selected batch.
+
+Images append in file-selection order, not filename order. The gallery shows the current page count and reading-order numbers, thumbnails, and accessible Move earlier / Move later controls. Open a thumbnail to view the original at a larger size. Page deletion requires confirmation and closes gaps in the remaining reading order. UUID identity remains unchanged when reordering. Deleting a book explicitly confirms removal of all pages and images too. Book timestamps describe edits to book metadata; adding/reordering pages does not rewrite those timestamps.
+
+### Version 2 stores
+
+| Store | Primary key | Indexes | Contents |
+| --- | --- | --- | --- |
+| `books` (unchanged) | `id` | `updatedAt` | Existing book metadata |
+| `pages` | `id` | `bookId`, `[bookId+readingOrder]` | Parent book ID, one-based order, optional original filename, ISO creation timestamp, decoded original pixel dimensions, MIME type, optional role |
+| `pageOriginals` | `pageId` | `bookId` | Parent book ID and original image Blob |
+| `pageThumbnails` | `pageId` | `bookId` | Parent book ID and thumbnail Blob |
+
+Original images are preserved byte-for-byte as Blobs, with no resizing, compression, base64 encoding, or EXIF stripping. Pixel dimensions are those reported by the browser decoder, which may apply EXIF orientation; encoded-file coordinate interpretation belongs to future geometric processing. Thumbnail generation draws the decoded image to a browser canvas with a maximum 480-pixel longest edge (never upscaling), a white transparency background, and JPEG quality 0.8. The original retains its original format, transparency, and metadata. Animated formats produce a single rendered thumbnail frame.
+
+Decode and thumbnail creation happen outside transactions. Each append atomically saves metadata, original, and thumbnail, checks that the parent still exists, and allocates its order inside a transaction. Reordering swaps adjacent orders transactionally. Page deletion atomically removes both assets and metadata and compacts order. Book deletion atomically removes the book and every matching page/original/thumbnail using indexed book-ID queries. Concurrent append/reorder/delete operations are serialized by IndexedDB transactions; there is no general conflict-resolution UI.
+
+### Performance, offline operation, and failures
+
+Page UI and processing are imported only by the existing lazy book route. The eagerly loaded library/database schema references page types only; it does not import the page-management UI or image processor. No dependencies or PWA cache rules were added for this milestone. The existing precache covers the emitted lazy code, so page import, viewing, ordering, and deletion can work offline after a successful application installation. The images themselves remain in IndexedDB and are never service-worker-cached.
+
+The gallery uses the existing Dexie React hooks dependency to observe ordered metadata. Each stable thumbnail component reads only its small thumbnail asset on mount, rather than refetching originals or rereading thumbnails on every reorder/progress update. An original is read only when its viewer opens. Object URLs are revoked on component cleanup; import decode URLs and canvases are also released. Thumbnails are read for mounted cards, so exceptionally large libraries may eventually benefit from gallery virtualization.
+
+Imports decode and save sequentially to limit working memory. There is a 50 MiB per-file and 60 megapixel decoded-image limit. JPEG, PNG, and other raster formats are accepted when the browser can decode them. Empty, non-image, SVG, corrupt, oversized, and unsupported images receive useful errors. Empty file MIME types use a known-image filename-extension fallback, followed by actual decoding. HEIC/HEIF, TIFF, and other format support varies: export to JPEG or PNG when decoding fails. Full-resolution decoding still depends on device memory and browser limits.
+
+Progress reports files processed and pages saved. Invalid images fail independently and later files continue. Database/quota failures stop the remaining batch; earlier committed pages remain saved and the current failed transaction leaves no partial assets. **Stop import** stops between images (an in-flight decode/save must settle); reports distinguish saved, failed, and not-imported files. Retry only failed/skipped files to avoid duplicates. There is no duplicate detection or resumable import queue.
+
+While saving/importing, book edits/deletion and other page mutations are disabled. Router navigation waits for the operation to finish; tab close/reload uses native unload protection where available. PWA updating is disabled during these operations as well. An abrupt browser/process shutdown can abort the current page transaction, but cannot roll back earlier successful imports. Mobile unload protection is best-effort.
+
+Where supported, `navigator.storage.estimate()` displays approximate site usage/quota and warns below 50 MiB estimated headroom or when selected originals appear to exceed headroom. Estimates are advisory and shared with other storage for this origin; actual quota errors still govern each transaction. There is no permanent-storage guarantee, persistence permission request, backup/export, or cloud copy. Keep source photos elsewhere.
+
+### Manual verification for Milestone 2A
+
+Run these commands yourself from PowerShell (none were executed for this change):
+
+```powershell
+Set-Location C:\workspace\active-projects\biboo
+npm run lint
+npm run build
+Get-ChildItem .\dist\assets\*.js | Select-Object Name,Length
+Select-String -Path .\dist\sw.js -Pattern 'BookPage|assets/|optional-resources'
+npm run preview -- --host 127.0.0.1 --port 4173
+```
+
+Open `http://127.0.0.1:4173` and verify:
+
+1. **Migration:** Before upgrading, retain a version 1 book on this exact origin/browser profile. Close older Biboo tabs and open the new build. Confirm its ID, languages, dimensions, and timestamps survive and it initially has zero pages. Inspect IndexedDB stores/indexes; Dexie may encode its logical schema version differently in the browser's native database version display. Use a disposable profile for destructive/error scenarios, not your real library.
+2. **Import:** Import multiple JPEG/PNG images with different orientations and filenames. Confirm selection order, count, pixel dimensions, MIME type, role, progress, thumbnails, and larger viewing. Reload the book and reopen the installed app. Compare the stored original Blob byte length/content with the source file via browser developer tools if validating byte preservation.
+3. **Camera:** On a real phone using an HTTPS deployment, try Take a photo (rear-camera hint). Also verify Import pages as the fallback and cancel/reselect the same file. Desktop localhost testing does not validate a phone camera chooser.
+4. **Validation/partial failures:** Select a valid image, a corrupt `.jpg`, and another valid image. The valid pages should persist in order and the corrupt one should be reported. Try a renamed non-image, an empty file, SVG, HEIC/HEIF on a browser without support, a file over 50 MiB, and an image above 60 megapixels. Inspect memory responsiveness on target phones; don't use production libraries for stress tests.
+5. **Management:** Move first/middle/last pages using keyboard and touch. Boundary buttons should be disabled; numbers should follow reading order while IDs and asset links stay fixed. Cancel and confirm a page delete; verify remaining order is contiguous and both associated assets disappear. Try Cover and Back cover imports. Check narrow-screen layout and accessible control names.
+6. **Atomic/cascade behavior:** In a disposable profile, simulate quota exhaustion using browser tooling if supported, or an intentionally limited-storage environment. Confirm a failed append leaves neither lone metadata nor orphan assets; previously imported pages remain and remaining files are reported as not imported. If the browser offers no safe quota simulation, record that case as unverified. Delete a multi-page book and confirm no matching records remain in any of the four stores. Another book's records must remain untouched.
+7. **Offline/lazy loading:** Wait for successful precaching and reload once under worker control. Switch to Offline before first opening a book route in that document. Import local files, view originals, reorder, delete, and reload/direct-load the book route. Confirm persistence. Inspect Cache Storage for application assets only, and IndexedDB for image Blobs. Network Initiator should distinguish service-worker chunk precaching from application imports; processing/UI code must remain outside the eager library graph.
+8. **Lifecycle/protection:** Open/close larger views and reorder repeatedly; check that thumbnail assets aren't refetched on every reorder and that object URLs are revoked when views/cards unmount. During a multi-image import, try Library/Back, edit/delete book, and a PWA update. Verify guards, Stop import, and the final saved/failed/skipped report. Do not enable developer-tool forced worker activation when checking update consent.
+9. **Storage caveat:** Confirm approximate usage appears where supported, unavailable estimates degrade cleanly, and low-space warnings do not promise permanent storage. Clearing site storage in a disposable profile should remove books and images; there is no recovery/export yet.
 
 ## Manual production and installation verification
 
@@ -120,10 +179,10 @@ The worker does not run under `npm run dev`; use the production preview for PWA 
 
 ## Known limitations and future milestones
 
-- Milestone 1B has not been compiled, linted, rendered, or browser-tested during delivery. Run the checks above before deployment.
+- Milestone 2A has not been compiled, linted, rendered, or browser-tested during delivery. Run the checks above before deployment.
 - Library queries refresh when their screens mount, not live across tabs. Concurrent edits use last successful save wins; there is no conflict-resolution UI.
 - No autosave, undo after deletion, backup/import/export, storage-persistence request, or cross-device synchronization. Browser unload prompts are best-effort, especially on mobile.
 - UI copy is English. Stored language tags support a broader future language catalogue.
 - Icons and service-worker output are generated during the production build; validate the generated assets on target devices.
 - Root-origin hosting only in this milestone. A deployment under a subpath needs coordinated Vite base, router, manifest, and worker-scope changes.
-- Future milestones may introduce page capture, OCR, AI translation, suitable sticker placement, and printable translated labels/PDFs. None of those features, authentication, cloud services, or a backend are included here.
+- Future milestones may introduce perspective correction, OCR, AI translation, suitable sticker placement, and printable translated labels/PDFs. None of those features, authentication, cloud services, or a backend are included here.

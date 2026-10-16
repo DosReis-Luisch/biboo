@@ -31,7 +31,15 @@ export const bookRepository = {
       return updated
     })
   },
-  delete: (id: string) => database.books.delete(id),
+  delete: (id: string) => database.transaction(
+    'rw', [database.books, database.pages, database.pageOriginals, database.pageThumbnails],
+    async () => {
+      await database.pageOriginals.where('bookId').equals(id).delete()
+      await database.pageThumbnails.where('bookId').equals(id).delete()
+      await database.pages.where('bookId').equals(id).delete()
+      await database.books.delete(id)
+    },
+  ),
 }
 
 export function storageError(error: unknown): string {

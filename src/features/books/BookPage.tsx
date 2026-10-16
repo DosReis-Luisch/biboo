@@ -20,6 +20,7 @@ import { Link, useBlocker, useNavigate, useOutletContext, useParams } from 'reac
 import type { ShellContext } from '../../App'
 import { bookRepository, storageError } from './bookRepository'
 import { dimensionPresets, languageName, languages, validateBook, type Book, type BookInput } from './book'
+import { PagesSection } from '../pages/PagesSection'
 
 export function BookPage() {
   const { bookId } = useParams()
@@ -35,6 +36,7 @@ function ExistingBook({ id }: { id: string }) {
   const [editing, setEditing] = useState(false)
   const [confirmDelete, setConfirmDelete] = useState(false)
   const [deleting, setDeleting] = useState(false)
+  const [pagesBusy, setPagesBusy] = useState(false)
   const navigate = useNavigate()
   useEffect(() => {
     let active = true
@@ -75,14 +77,14 @@ function ExistingBook({ id }: { id: string }) {
         <Divider />
         <Box><Typography variant="h3" gutterBottom>Page dimensions</Typography><Typography>{book.widthMm} × {book.heightMm} mm · {book.widthMm === book.heightMm ? 'Square' : book.widthMm > book.heightMm ? 'Landscape' : 'Portrait'}</Typography></Box>
         <Typography variant="body2" color="text.secondary">Created {new Date(book.createdAt).toLocaleString()}<br />Last saved {new Date(book.updatedAt).toLocaleString()}</Typography>
-        <Button variant="contained" onClick={() => setEditing(true)} sx={{ alignSelf: 'flex-start' }}>Edit book</Button>
+        <Button variant="contained" disabled={pagesBusy} onClick={() => setEditing(true)} sx={{ alignSelf: 'flex-start' }}>Edit book</Button>
       </Stack>
     </Paper>
-    <Typography color="text.secondary" variant="body2">This project currently stores your book details. Page capture and translation are planned for future milestones.</Typography>
-    <Button color="error" startIcon={<DeleteOutlineRounded />} onClick={() => setConfirmDelete(true)} sx={{ alignSelf: 'flex-start' }}>Delete book</Button>
+    <PagesSection bookId={id} onBusyChange={setPagesBusy} />
+    <Button color="error" disabled={pagesBusy} startIcon={<DeleteOutlineRounded />} onClick={() => setConfirmDelete(true)} sx={{ alignSelf: 'flex-start' }}>Delete book</Button>
     <Dialog open={confirmDelete} onClose={() => { if (!deleting) setConfirmDelete(false) }} aria-labelledby="delete-title" aria-describedby="delete-description">
       <DialogTitle id="delete-title">Delete this book?</DialogTitle>
-      <DialogContent><DialogContentText id="delete-description">“{book.title}” will be permanently removed from this device. This cannot be undone.</DialogContentText></DialogContent>
+      <DialogContent><DialogContentText id="delete-description">“{book.title}”, all its pages, and their original images and thumbnails will be permanently removed from this device. This cannot be undone.</DialogContentText></DialogContent>
       <DialogActions><Button autoFocus disabled={deleting} onClick={() => setConfirmDelete(false)}>Keep book</Button><Button color="error" disabled={deleting} onClick={() => { void deleteBook() }}>{deleting ? 'Deleting…' : 'Delete book'}</Button></DialogActions>
     </Dialog>
   </Stack>
