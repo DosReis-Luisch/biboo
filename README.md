@@ -315,6 +315,39 @@ npm run preview -- --host 127.0.0.1 --port 4173
 6. **Storage/cancel/downloads:** Where safely supported, simulate quota failure during the final write and confirm all seven-store additions roll back. Cancel extraction/export and try navigation, reload, and a PWA update while busy. The final write disables cancel. Verify keyboard access, progress/error/success announcements, phone layout, and iOS/desktop download behavior. Cancellation and quota cases that cannot safely be exercised should remain recorded as unverified.
 7. **Edge cases/lazy boundary:** Export/restore an empty book, an uncorrected book, unknown but valid language tags, original formats the receiving browser cannot decode, and a correction whose saved physical dimensions differ from the current book. Existing warnings/thumbnail fallback behavior should remain meaningful. Inspect the emitted dependency graph/Network initiators to confirm ZIP is dynamically imported; distinguish service-worker precaching from eager module execution.
 
+## Automated regression tests (Milestone 3.1)
+
+The existing Vitest and fake-indexeddb development dependencies run a small Node-only suite. Use a Node version supported by the installed Vitest 5 (Node 22.12+, 24, or 26+ in its supported release ranges). No browser, running app, service worker, image codec, or external service is needed. `vitest.config.ts` is separate from the production Vite/PWA configuration, and tests live outside `src` and the production TypeScript project. No test setup is imported by application code. The separate test TypeScript configuration checks the tests and the production helpers they import; Vitest itself transpiles tests without type-checking them.
+
+From PowerShell, run manually:
+
+```powershell
+Set-Location C:\workspace\active-projects\biboo
+npm run test:types
+npm test
+```
+
+Optional watch mode (stop with Ctrl+C), or run one suite:
+
+```powershell
+npm run test:watch
+npm test -- tests/geometry.test.ts
+npm test -- tests/backup.test.ts
+npm test -- tests/archive.test.ts
+npm test -- tests/persistence.test.ts
+```
+
+Coverage is organized around the existing production functions:
+
+- `tests/geometry.test.ts`: identity and known trapezoid coordinates, skewed forward/inverse mappings, deterministic grid round trips, all display rotations and corner-order round trips, invalid/degenerate/crossed corners, singular matrices and projective denominators, physical-ratio rounding, RGBA edges/center sampling, alpha compositing, and chunked rendering.
+- `tests/backup.test.ts`: empty, original-only and corrected snapshots; complete metadata and Blob preservation; fresh book/page/revision IDs with consistent ownership; missing/extra/mismatched assets, invalid metadata/references/corners, duplicate IDs, unsupported versions, and declared per-image/total/page limits.
+- `tests/archive.test.ts`: real small ZIP STORE round trips using the production dynamically loaded zip.js implementation, preserving all bytes and MIME types; invalid JSON/UTF-8, unsafe paths and missing/extra entries, CRC corruption, truncation, cancellation, and file/manifest size guards. No ZIP implementation mock or large binary fixture is used. An oversized file guard is exercised with a mocked size getter; an oversized manifest uses a patched ZIP header. These checks do not allocate hundreds of megabytes or simulate a full decompression bomb.
+- `tests/persistence.test.ts`: real Dexie operations against fake-indexeddb, schema/index checks, version 1/2 upgrades, book create/update/reopen, complete independent restores, a forced final-store write failure rolling back all seven stores, canceled/invalid restores, stable-ID reordering and rollback, accessible move operations, and page/book cascades preserving another book.
+
+`tests/setup.ts` installs fake-indexeddb before Dexie imports. Each persistence test deletes and reopens the fake database, and cleanup deletes it again. Failure-injection hooks are removed in `finally` blocks. Fixtures have fixed IDs/timestamps and tiny, distinct binary payloads; archives intentionally retain opaque image bytes rather than decoding them. Geometry tests use separate tiny synthetic RGBA buffers and numeric tolerances. New restore IDs are checked for uniqueness and correct relationships rather than fixed random values.
+
+This foundation does not exercise React UI, browser image decoding/EXIF, real device quota limits, worker execution, downloads, or PWA installation/offline caching. Continue using the manual browser checks above for those behaviors. It does not exhaustively cover every adversarial ZIP encoding or browser storage failure. No production defect has been established and no production behavior has been changed in this milestone. **Tests, type checks, builds, and lint were not executed during implementation; results remain unverified until you run them.**
+
 ## Manual production and installation verification
 
 From PowerShell:
