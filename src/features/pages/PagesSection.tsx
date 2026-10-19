@@ -180,15 +180,16 @@ export function PagesSection({ bookId, onBusyChange }: { bookId: string; onBusyC
     <Typography variant="h2" id="pages-title">Pages{result && !result.error ? ` (${pages.length})` : ''}</Typography>
     <Typography variant="body2" color="text.secondary">Add photographs in reading order. Originals stay on this device; nothing is uploaded.</Typography>
     <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1.5}>
-      <Button variant="contained" disabled={working || !result || !!result.error} onClick={() => filesInput.current?.click()}>Import pages</Button>
-      <Button variant="outlined" disabled={working || !result || !!result.error} onClick={() => cameraInput.current?.click()}>Take a photo</Button>
+      <Button variant="contained" disabled={working || !result || !!result.error} onClick={() => { void navigate(`/books/${bookId}/scan`) }}>Scan book</Button>
+      <Button variant="outlined" disabled={working || !result || !!result.error} onClick={() => filesInput.current?.click()}>Import photos</Button>
+      <Button variant="outlined" disabled={working || !result || !!result.error} onClick={() => cameraInput.current?.click()}>Take single photo</Button>
     </Stack>
     <input hidden ref={filesInput} type="file" accept="image/*" multiple onChange={selected} aria-label="Choose page images" />
     <input hidden ref={cameraInput} type="file" accept="image/*" capture="environment" onChange={selected} aria-label="Take a page photograph" />
     <TextField select label="Page type for next import" value={role} disabled={working} onChange={(event) => setRole(event.target.value as PageRole)} sx={{ maxWidth: 300 }}>
       {(Object.keys(pageRoleLabels) as PageRole[]).map((value) => <MenuItem key={value} value={value}>{pageRoleLabels[value]}</MenuItem>)}
     </TextField>
-    <Typography variant="caption" color="text.secondary">JPEG, PNG, and other formats your browser can decode. Up to 50 MiB and 60 megapixels per image. Camera support varies; use Import pages if capture is unavailable.</Typography>
+    <Typography variant="caption" color="text.secondary">Import photos lets you select multiple images from your photo library. JPEG, PNG, and other formats your browser can decode; up to 50 MiB and 60 megapixels per image. Camera support varies; use Import photos if capture is unavailable.</Typography>
     <Typography variant="caption" color="text.secondary">
       {storage?.usage !== undefined && storage.quota !== undefined ? `Estimated site storage: ${formatBytes(storage.usage)} used of ${formatBytes(storage.quota)}. ` : 'Storage estimates are unavailable in this browser. '}
       Browser storage can be cleared or evicted. Keep your original photos elsewhere too.

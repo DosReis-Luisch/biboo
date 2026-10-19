@@ -25,13 +25,26 @@ export const pageRepository = {
     return database.pageThumbnails.get(pageId)
   },
 
-  async add(bookId: string, image: PreparedPageImage, role: PageRole): Promise<BookPage> {
-    const id = createId()
+  async add(bookId: string, image: PreparedPageImage, role: PageRole, captureId?: string): Promise<BookPage> {
+    const id = captureId ?? createId()
     // Decode/thumbnail work must finish BEFORE opening an IndexedDB transaction.
     return database.transaction(
       'rw', [database.books, database.pages, database.pageOriginals, database.pageThumbnails],
       async () => {
         if (!await database.books.get(bookId)) throw new Error('The book was deleted. Return to your library.')
+        // Scanner retries retain one UUID. A committed capture is acknowledged,
+        // never appended or overwritten a second time (including after reorder).
+        const existing = captureId ? await database.pages.get(id) : undefined
+        if (existing) {
+          const original = await database.pageOriginals.get(id), thumbnail = await database.pageThumbnails.get(id)
+          if (existing.bookId !== bookId || existing.widthPx !== image.widthPx || existing.heightPx !== image.heightPx
+            || existing.mimeType !== image.mimeType || existing.originalFilename !== image.originalFilename
+            || !original || original.bookId !== bookId || original.blob.size !== image.original.size || original.blob.type !== image.original.type
+            || !thumbnail || thumbnail.bookId !== bookId || thumbnail.blob.size !== image.thumbnail.size || thumbnail.blob.type !== image.thumbnail.type) {
+            throw new Error('This capture ID has inconsistent saved data. Return to the gallery before continuing.')
+          }
+          return existing
+        }
         const last = await orderedPages(bookId).last()
         const page: BookPage = {
           id, bookId, readingOrder: (last?.readingOrder ?? 0) + 1,

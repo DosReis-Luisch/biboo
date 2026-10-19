@@ -32,6 +32,14 @@ const router = createBrowserRouter([{
       errorElement: <RouteErrorPage />,
     },
     {
+      path: '/books/:bookId/scan',
+      lazy: async () => {
+        const { ScannerPage } = await import('./features/scanner/ScannerPage')
+        return { Component: ScannerPage }
+      },
+      errorElement: <RouteErrorPage />,
+    },
+    {
       path: '/books/:bookId/pages/:pageId/correct',
       lazy: async () => {
         const { CorrectionPage } = await import('./features/correction/CorrectionPage')

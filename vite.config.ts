@@ -60,7 +60,7 @@ export default defineConfig(({ isPreview }) => {
       // downloads belong here (public/optional-resources), outside precaching.
       globIgnores: ['optional-resources/**', 'ocr-assets/**'],
       navigateFallback: 'index.html',
-      navigateFallbackAllowlist: [/^\/$/, /^\/books(?:\/[^/?]+)?\/?$/, /^\/books\/[^/?]+\/pages\/[^/?]+\/(?:correct|ocr)\/?$/, /^\/backup\/import\/?$/, /^\/books\/[^/?]+\/backup\/?$/],
+      navigateFallbackAllowlist: [/^\/$/, /^\/books(?:\/[^/?]+)?\/?$/, /^\/books\/[^/?]+\/scan\/?$/, /^\/books\/[^/?]+\/pages\/[^/?]+\/(?:correct|ocr)\/?$/, /^\/backup\/import\/?$/, /^\/books\/[^/?]+\/backup\/?$/],
       runtimeCaching: [{
         // Only immutable, packaged OCR assets; no user images or arbitrary URLs.
         // Preparation requests have a query, bypass this rule, and verify SHA-256.
