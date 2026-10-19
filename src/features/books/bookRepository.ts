@@ -32,10 +32,13 @@ export const bookRepository = {
     })
   },
   delete: (id: string) => database.transaction(
-    'rw', [database.books, database.pages, database.pageOriginals, database.pageThumbnails],
+    'rw', [database.books, database.pages, database.pageOriginals, database.pageThumbnails, database.pageCorrections, database.pageCorrectedImages, database.pageCorrectedThumbnails],
     async () => {
       await database.pageOriginals.where('bookId').equals(id).delete()
       await database.pageThumbnails.where('bookId').equals(id).delete()
+      await database.pageCorrections.where('bookId').equals(id).delete()
+      await database.pageCorrectedImages.where('bookId').equals(id).delete()
+      await database.pageCorrectedThumbnails.where('bookId').equals(id).delete()
       await database.pages.where('bookId').equals(id).delete()
       await database.books.delete(id)
     },

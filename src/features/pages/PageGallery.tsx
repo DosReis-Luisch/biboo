@@ -14,19 +14,20 @@ import Stack from '@mui/material/Stack'
 import Typography from '@mui/material/Typography'
 import DragIndicatorRounded from '@mui/icons-material/DragIndicatorRounded'
 import { PageImage } from './PageImage'
-import { pageRoleLabels, type BookPage } from './page'
+import { pageRoleLabels, type BookPage, type GalleryPage } from './page'
 
 type GalleryProps = {
-  pages: BookPage[]
+  pages: GalleryPage[]
   disabled: boolean
   onView: (page: BookPage) => void
   onDelete: (page: BookPage) => void
+  onCorrect: (page: BookPage) => void
   onMove: (page: BookPage, direction: -1 | 1) => void
   onReorder: (pageIds: string[]) => Promise<void>
   onDraggingChange: (dragging: boolean) => void
 }
 
-export function PageGallery({ pages, disabled, onView, onDelete, onMove, onReorder, onDraggingChange }: GalleryProps) {
+export function PageGallery({ pages, disabled, onView, onDelete, onCorrect, onMove, onReorder, onDraggingChange }: GalleryProps) {
   const sensors = useSensors(
     useSensor(MouseSensor, { activationConstraint: { distance: 8 } }),
     useSensor(TouchSensor, { activationConstraint: { delay: 250, tolerance: 8 } }),
@@ -80,15 +81,16 @@ export function PageGallery({ pages, disabled, onView, onDelete, onMove, onReord
         {pages.map((page, index) => <SortablePageCard key={page.id} page={page} index={index} count={pages.length} disabled={disabled}
           onView={() => { if (!suppressActions.current) onView(page) }}
           onDelete={() => { if (!suppressActions.current) onDelete(page) }}
+          onCorrect={() => { if (!suppressActions.current) onCorrect(page) }}
           onMove={(direction) => { if (!suppressActions.current) onMove(page, direction) }} />)}
       </Box>
     </SortableContext>
   </DndContext>
 }
 
-function SortablePageCard({ page, index, count, disabled, onView, onDelete, onMove }: {
-  page: BookPage; index: number; count: number; disabled: boolean
-  onView: () => void; onDelete: () => void; onMove: (direction: -1 | 1) => void
+function SortablePageCard({ page, index, count, disabled, onView, onDelete, onCorrect, onMove }: {
+  page: GalleryPage; index: number; count: number; disabled: boolean
+  onView: () => void; onDelete: () => void; onCorrect: () => void; onMove: (direction: -1 | 1) => void
 }) {
   const { attributes, listeners, setNodeRef, setActivatorNodeRef, transform, transition, isDragging, isSorting, isOver } = useSortable({ id: page.id, disabled })
   const controlsDisabled = disabled || isSorting
@@ -103,7 +105,7 @@ function SortablePageCard({ page, index, count, disabled, onView, onDelete, onMo
       backgroundColor: isOver && !isDragging ? '#f1f3e9' : 'background.paper',
     }}>
     <CardActionArea disabled={controlsDisabled} onClick={onView} aria-label={`Open page ${index + 1}`} sx={{ height: 'auto', flexShrink: 0 }}>
-      <PageImage pageId={page.id} alt={`Thumbnail of page ${index + 1}`} />
+      <PageImage pageId={page.id} correctionRevision={page.correctionRevision} alt={`Thumbnail of page ${index + 1}${page.correctionRevision ? ', corrected' : ''}`} />
     </CardActionArea>
     <CardContent sx={{ p: 2, '&:last-child': { pb: 2 }, flexGrow: 1 }}>
       <Stack direction="row" sx={{ justifyContent: 'space-between', alignItems: 'center', gap: 1 }}>
@@ -115,7 +117,9 @@ function SortablePageCard({ page, index, count, disabled, onView, onDelete, onMo
         </Button>
       </Stack>
       <Typography variant="body2" color="text.secondary">{page.role ? pageRoleLabels[page.role] : 'Page'} · {page.widthPx} × {page.heightPx} px</Typography>
+      {page.correctionRevision && <Typography variant="caption" color="primary">Correction applied · original preserved</Typography>}
       <Stack direction="row" spacing={0.5} useFlexGap sx={{ flexWrap: 'wrap', mt: 1 }}>
+        <Button size="small" disabled={controlsDisabled} onClick={onCorrect} aria-label={`Correct page ${index + 1}`}>Correct page</Button>
         <Button size="small" disabled={controlsDisabled || index === 0} onClick={() => onMove(-1)} aria-label={`Move page ${index + 1} earlier`}>Move earlier</Button>
         <Button size="small" disabled={controlsDisabled || index === count - 1} onClick={() => onMove(1)} aria-label={`Move page ${index + 1} later`}>Move later</Button>
         <Button size="small" color="error" disabled={controlsDisabled} onClick={onDelete} aria-label={`Delete page ${index + 1}`}>Delete page</Button>

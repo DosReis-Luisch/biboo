@@ -1,6 +1,6 @@
 import Dexie from 'dexie'
 import { database } from '../../data/database'
-import type { BookPage, PageRole, PreparedPageImage } from './page'
+import type { BookPage, GalleryPage, PageRole, PreparedPageImage } from './page'
 
 function orderedPages(bookId: string) {
   return database.pages.where('[bookId+readingOrder]')
@@ -9,8 +9,20 @@ function orderedPages(bookId: string) {
 
 export const pageRepository = {
   list: (bookId: string) => orderedPages(bookId).toArray(),
+  listGallery: (bookId: string): Promise<GalleryPage[]> => database.transaction('r', [database.pages, database.pageCorrections], async () => {
+    const pages = await orderedPages(bookId).toArray()
+    const corrections = await database.pageCorrections.where('bookId').equals(bookId).toArray()
+    const revisions = new Map(corrections.map((correction) => [correction.pageId, correction.revision]))
+    return pages.map((page) => ({ ...page, correctionRevision: revisions.get(page.id) }))
+  }),
   getOriginal: (pageId: string) => database.pageOriginals.get(pageId),
-  getThumbnail: (pageId: string) => database.pageThumbnails.get(pageId),
+  async getThumbnail(pageId: string, correctionRevision?: string) {
+    if (correctionRevision) {
+      const corrected = await database.pageCorrectedThumbnails.get(pageId)
+      if (corrected?.revision === correctionRevision) return corrected
+    }
+    return database.pageThumbnails.get(pageId)
+  },
 
   async add(bookId: string, image: PreparedPageImage, role: PageRole): Promise<BookPage> {
     // Decode/thumbnail work must finish BEFORE opening an IndexedDB transaction.
@@ -72,12 +84,15 @@ export const pageRepository = {
   },
 
   delete(bookId: string, pageId: string) {
-    return database.transaction('rw', [database.pages, database.pageOriginals, database.pageThumbnails], async () => {
+    return database.transaction('rw', [database.pages, database.pageOriginals, database.pageThumbnails, database.pageCorrections, database.pageCorrectedImages, database.pageCorrectedThumbnails], async () => {
       const page = await database.pages.get(pageId)
       if (!page) return
       if (page.bookId !== bookId) throw new Error('This page does not belong to this book.')
       await database.pageOriginals.delete(pageId)
       await database.pageThumbnails.delete(pageId)
+      await database.pageCorrections.delete(pageId)
+      await database.pageCorrectedImages.delete(pageId)
+      await database.pageCorrectedThumbnails.delete(pageId)
       await database.pages.delete(pageId)
       const remaining = await orderedPages(bookId).toArray()
       await database.pages.bulkPut(remaining.map((item, index) => ({ ...item, readingOrder: index + 1 })))

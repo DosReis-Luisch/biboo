@@ -18,6 +18,8 @@ export interface PageAsset {
   blob: Blob
 }
 
+export type GalleryPage = BookPage & { correctionRevision?: string }
+
 export interface PreparedPageImage {
   original: Blob
   thumbnail: Blob

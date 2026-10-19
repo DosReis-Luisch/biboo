@@ -1,12 +1,16 @@
 import Dexie, { type EntityTable } from 'dexie'
 import type { Book } from '../features/books/book'
 import type { BookPage, PageAsset } from '../features/pages/page'
+import type { PageCorrection, CorrectedAsset } from '../features/correction/correction'
 
 const database = new Dexie('biboo') as Dexie & {
   books: EntityTable<Book, 'id'>
   pages: EntityTable<BookPage, 'id'>
   pageOriginals: EntityTable<PageAsset, 'pageId'>
   pageThumbnails: EntityTable<PageAsset, 'pageId'>
+  pageCorrections: EntityTable<PageCorrection, 'pageId'>
+  pageCorrectedImages: EntityTable<CorrectedAsset, 'pageId'>
+  pageCorrectedThumbnails: EntityTable<CorrectedAsset, 'pageId'>
 }
 
 // Keep version 1 intact; add future schema changes as new versions with migrations.
@@ -17,6 +21,12 @@ database.version(2).stores({
   pages: 'id, bookId, [bookId+readingOrder]',
   pageOriginals: 'pageId, bookId',
   pageThumbnails: 'pageId, bookId',
+})
+
+database.version(3).stores({
+  pageCorrections: 'pageId, bookId',
+  pageCorrectedImages: 'pageId, bookId',
+  pageCorrectedThumbnails: 'pageId, bookId',
 })
 
 export { database }

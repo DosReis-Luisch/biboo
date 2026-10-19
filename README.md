@@ -2,7 +2,7 @@
 
 Biboo is a local-first Progressive Web Application for bilingual families. It provides an installable, offline-capable book library: create a book, choose its languages, set page dimensions, and add photographs of its pages. Milestone 2A adds local file/camera import, thumbnails, larger viewing, reading-order management, and page deletion.
 
-All metadata, original images, and thumbnails stay on the device. Perspective correction (Milestone 2B), OCR, translation, sticker positioning, printable labels, and PDFs are future work.
+All metadata, original images, and thumbnails stay on the device. Milestone 2B adds manual, non-destructive four-corner perspective correction. OCR, translation, sticker positioning, printable labels, and PDFs are future work.
 
 ## Stack
 
@@ -21,7 +21,7 @@ npm run preview -- --host 127.0.0.1 --port 4173
 
 Development runs on the URL printed by Vite. The development server intentionally does not register a service worker. `build` runs the TypeScript project build, bundles the application, generates installation assets and the manifest, and produces the service worker in `dist`. `preview` serves that production output for local inspection; it is not a production hosting service.
 
-Milestone 2A.1 has not been built, linted, or browser-tested during implementation. Run the manual checks below; no successful execution is claimed for these changes.
+Milestone 2B has not been built, linted, or browser-tested during implementation. Run the manual checks below; no successful execution is claimed for these changes.
 
 ## Source structure
 
@@ -29,6 +29,7 @@ Milestone 2A.1 has not been built, linted, or browser-tested during implementati
 - `src/App.tsx`: responsive navigation, shared layout, update prompt, and editing state.
 - `src/features/books/`: book types, validation, language and dimension catalogues, repository, library, detail, and editor screens.
 - `src/features/pages/`: page/asset types, transactional repository, browser image preparation, reactive page gallery, and image URL lifecycle.
+- `src/features/correction/`: separately lazy-loaded correction editor, normalized-coordinate conventions, pure projective geometry/pixel sampling, worker, and transactional correction persistence.
 - `src/data/database.ts`: typed Dexie schema and database version.
 - `src/main.tsx`: theme and React Router routes.
 - `public/biboo.svg`: original book-mark icon and source for generated installation assets.
@@ -82,7 +83,7 @@ npm run preview -- --host 127.0.0.1 --port 4173
 
 ## Local persistence
 
-The `biboo` IndexedDB database is schema version 2. The unchanged version 1 declaration and book records are preserved by an additive version 2 declaration. The `books` store uses UUID `id` as primary key and indexes `updatedAt` for newest-first listing. Each book stores:
+The `biboo` IndexedDB database is schema version 3. The unchanged version 1 and 2 declarations preserve all existing books, pages, originals, and thumbnails; version 3 adds separate correction stores without rewriting old records. The `books` store uses UUID `id` as primary key and indexes `updatedAt` for newest-first listing. Each book stores:
 
 - `id`, `title`, `sourceLanguage`, `targetLanguage`
 - `widthMm`, `heightMm`
@@ -187,10 +188,80 @@ Open `http://127.0.0.1:4173` and verify:
 3. **Camera:** On a real phone using an HTTPS deployment, try Take a photo (rear-camera hint). Also verify Import pages as the fallback and cancel/reselect the same file. Desktop localhost testing does not validate a phone camera chooser.
 4. **Validation/partial failures:** Select a valid image, a corrupt `.jpg`, and another valid image. The valid pages should persist in order and the corrupt one should be reported. Try a renamed non-image, an empty file, SVG, HEIC/HEIF on a browser without support, a file over 50 MiB, and an image above 60 megapixels. Inspect memory responsiveness on target phones; don't use production libraries for stress tests.
 5. **Management:** Move first/middle/last pages using keyboard and touch. Boundary buttons should be disabled; numbers should follow reading order while IDs and asset links stay fixed. Cancel and confirm a page delete; verify remaining order is contiguous and both associated assets disappear. Try Cover and Back cover imports. Check narrow-screen layout and accessible control names.
-6. **Atomic/cascade behavior:** In a disposable profile, simulate quota exhaustion using browser tooling if supported, or an intentionally limited-storage environment. Confirm a failed append leaves neither lone metadata nor orphan assets; previously imported pages remain and remaining files are reported as not imported. If the browser offers no safe quota simulation, record that case as unverified. Delete a multi-page book and confirm no matching records remain in any of the four stores. Another book's records must remain untouched.
+6. **Atomic/cascade behavior:** In a disposable profile, simulate quota exhaustion using browser tooling if supported, or an intentionally limited-storage environment. Confirm a failed append leaves neither lone metadata nor orphan assets; previously imported pages remain and remaining files are reported as not imported. If the browser offers no safe quota simulation, record that case as unverified. Delete a multi-page book and confirm no matching records remain in any of the seven stores, including derived correction data. Another book's records must remain untouched.
 7. **Offline/lazy loading:** Wait for successful precaching and reload once under worker control. Switch to Offline before first opening a book route in that document. Import local files, view originals, reorder, delete, and reload/direct-load the book route. Confirm persistence. Inspect Cache Storage for application assets only, and IndexedDB for image Blobs. Network Initiator should distinguish service-worker chunk precaching from application imports; processing/UI code must remain outside the eager library graph.
 8. **Lifecycle/protection:** Open/close larger views and reorder repeatedly; check that thumbnail assets aren't refetched on every reorder and that object URLs are revoked when views/cards unmount. During a multi-image import, try Library/Back, edit/delete book, and a PWA update. Verify guards, Stop import, and the final saved/failed/skipped report. Do not enable developer-tool forced worker activation when checking update consent.
 9. **Storage caveat:** Confirm approximate usage appears where supported, unavailable estimates degrade cleanly, and low-space warnings do not promise permanent storage. Clearing site storage in a disposable profile should remove books and images; there is no recovery/export yet.
+
+## Non-destructive page correction (Milestone 2B)
+
+Choose **Correct page** on a gallery card or in the original-photograph viewing dialog. This opens the separate lazy route `/books/:bookId/pages/:pageId/correct`. It loads only that page's original and saved settings. Existing uncorrected pages need no migration work and still show their original thumbnails.
+
+Drag the four 44-pixel handles to the paper corners. TL/TR/BR/BL mean Top-left/Top-right/Bottom-right/Bottom-left of the intended corrected page. Handles support mouse/touch Pointer Events, pointer capture, and keyboard arrow adjustments (0.5% steps, or 0.1% with Shift). Only handles disable touch scrolling; the rest of the editor/page can scroll normally. Rotate left/right in 90-degree steps, adjust corners, then choose **Preview correction**. The corrected result and actual output dimensions appear before **Save correction** becomes available. Changing any point or rotation invalidates that preview.
+
+Reopening restores the saved selection/rotation and always regenerates from the original image. **Reset selection** restores the full unrotated photo as an unsaved draft; preview/save to apply it. **Use original / remove correction** instead confirms atomic deletion of the persisted settings and both derived images, returning the gallery to the imported thumbnail. Cancel does not alter saved data. Selection changes, unsaved previews, and processing/saving protect router navigation, browser unload where supported, and PWA update activation. Stop processing cancels a preview; saving must finish before leaving.
+
+The gallery prefers the corrected thumbnail and labels corrected pages. Clicking a thumbnail still opens the explicitly labeled **original photograph**, keeping the original accessible at all times. Sorting, IDs, roles, import order, and original dimensions remain unchanged. Metadata live queries join correction revision IDs without loading image Blobs. A thumbnail is reread when its correction revision changes; ordinary reordering retains its existing URL and does not fetch originals.
+
+### Version 3 storage and concurrency
+
+| New store | Primary key | Index | Contents |
+| --- | --- | --- | --- |
+| `pageCorrections` | `pageId` | `bookId` | Four normalized source corners, rotation, decoded source pixel dimensions, actual target pixel dimensions, physical width/height used, ISO update timestamp, UUID revision |
+| `pageCorrectedImages` | `pageId` | `bookId` | Derived JPEG Blob and matching correction revision |
+| `pageCorrectedThumbnails` | `pageId` | `bookId` | Derived thumbnail JPEG Blob and matching revision |
+
+Settings, corrected image, and corrected thumbnail are saved in one transaction after processing/encoding finishes. Neither `pageOriginals` nor imported thumbnails are written by correction code. Quota, processing, or revision failures preserve the entire prior correction. Saving checks that the parent/page/original still exist, that physical book dimensions have not changed, and that the loaded correction revision is still current. Concurrent edits/removals in another tab are rejected instead of silently overwriting them. Reopen the editor after such a conflict or after physical dimensions change. Existing corrections are not automatically regenerated when a book's size changes; the editor warns and uses the current book ratio for its next preview.
+
+Page deletion and book deletion include all derived stores in their existing cascade transactions. Removing a correction also validates its loaded revision. Close older Biboo tabs when upgrading the database schema. There is no backup/export or permanent-storage guarantee.
+
+### Projective geometry and coordinate conventions
+
+`geometry.ts` contains pure functions with no React, DOM, IndexedDB, or worker dependencies. A correction is a four-point projective rectification, not CSS projection or rectangular cropping. Coordinates use x rightward, y downward, normalized to `[0,1]` in the browser-decoded original photo. Corner-array indices always correspond to destination TL, TR, BR, BL. Positive cross products represent clockwise winding in this coordinate system.
+
+For clockwise display rotation, original `(x,y)` maps to `(1-y,x)`; counterclockwise maps to `(y,1-x)`. Drag positions are converted back through the inverse display rotation before storage. A clockwise step cycles correspondence to `[old BL, old TL, old TR, old BR]`; a counterclockwise step uses `[old TR, old BR, old BL, old TL]`. The pixel engine uses that correspondence directly, so it does not apply rotation a second time.
+
+The engine solves eight homography parameters with partial-pivot Gaussian elimination, fixing the inverse map's `h33` to 1. It solves from the unit destination rectangle to the four source points, whose destination origin maps to a finite source corner. Matrix inversion supplies the corresponding source-to-destination map. Solving in this direction avoids assuming the forward map must be normalizable at the original photo's origin. Each output pixel is inverse-mapped to the source, then bilinearly interpolated from four neighboring pixels. Pixel indices span `0..width-1` and `0..height-1`. Alpha is interpolated in premultiplied form and composited onto white; derived output is JPEG. This is encoded-color-space interpolation, not linear-light color reconstruction.
+
+Validation rejects nonfinite/out-of-bounds coordinates, reversed winding, concave/self-intersecting selections, normalized edges shorter than 0.01, cross products below 0.0001, and areas below 0.005 of the full photo. Singular/unstable systems, near-zero projective denominators, and mappings outside the source also fail without writes. These deliberate thresholds reject very small crops/extreme perspectives rather than producing misleading results.
+
+Output matches the book's physical width-to-height ratio to integer-pixel rounding, with a longest edge of 2400 pixels and a minimum of two pixels per axis. Extremely narrow physical ratios that cannot meet those limits are rejected. The actual pixel size and physical dimensions used are stored. Paper curvature, lens distortion, motion blur, missing image detail, and incorrect physical dimensions cannot be corrected by a planar homography and may still distort results. There is no automatic corner detection.
+
+### Memory, performance, and browser limitations
+
+Only the dedicated correction route imports its editor/processing engine. Native canvas decoding/resampling creates a working source of at most 3000 pixels on its longest edge. The sampling worker receives that pixel buffer by transfer and returns a transferred result; it is terminated on completion, failure, cancellation, or editor unmount. No per-pixel object/array allocations are made in the sampling loop. When workers are unavailable or construction fails, a native main-thread fallback processes 16 rows at a time and yields between batches. Asynchronous worker load/runtime failures are reported rather than silently changing processing paths after the source buffer has been transferred.
+
+A square working buffer can occupy about 36 MB and a square output about 23 MB before canvas/encoding/display overhead. The original browser decoder may additionally retain up to roughly 240 MB for a 60-megapixel import, and canvas operations can have transient copies. These bounds do not guarantee success on memory-constrained phones. The editor rejects decoded originals above 60 megapixels; source decoding, canvas readback, and encoding may still briefly block the UI or fail on individual devices. Stop processing terminates worker sampling; native decode/readback/encoding steps must settle before cancellation is observed. Preview can enlarge a low-resolution crop but cannot restore lost detail.
+
+Canvases are cleared, worker buffers are released on termination, original/preview object URLs are revoked, and decoded original references are released when the editor closes. Browsers may retain internal image caches until memory pressure. The normal gallery never decodes all originals, and drag previews still reuse thumbnails.
+
+Compatibility depends on native `Image.decode`, Canvas/ImageData/JPEG encoding, SVG image display, Pointer Events/pointer capture, CSS aspect-ratio, transferable ArrayBuffers, and (preferably) module Web Workers. HEIC/HEIF and other decoding support remains browser-dependent. Browser EXIF orientation/color handling can vary. If decoded dimensions differ from the saved settings, the editor explicitly starts a fresh selection while preserving the saved correction until an explicit save/removal. JPEG derivatives do not retain original metadata, transparency, or guaranteed original color profiles; the untouched original does.
+
+Workbox still precaches only application assets. Its existing JavaScript glob includes the correction route and emitted worker bundle; navigation fallback now also permits direct correction-route loads. Corrections, previews, originals, and thumbnails are never service-worker-cached or uploaded. All correction features can work offline after the complete application cache is installed, including when this editor has not previously been visited. A failed/incomplete first installation is not an offline-ready state.
+
+### Manual verification for Milestone 2B
+
+No builds, lint, tests, browser validation, or mathematical test execution were performed for this milestone. Run manually:
+
+```powershell
+Set-Location C:\workspace\active-projects\biboo
+npm run lint
+npm run build
+Get-ChildItem .\dist\assets\*.js | Select-Object Name,Length
+Select-String -Path .\dist\sw.js -Pattern 'CorrectionPage|correction.worker|assets/'
+npm run preview -- --host 127.0.0.1 --port 4173
+```
+
+1. **Migration/non-destruction:** Upgrade a profile containing version 1 books and version 2 pages. Confirm all old data, filenames, IDs, roles, timestamps, order, original Blobs, and imported thumbnails survive. Inspect the three new stores. Compare original bytes/hashes before and after preview/save/edit/reset/remove. Use a disposable library for destructive/failure checks.
+2. **Editor:** Correct a photographed rectangular grid/book page from an oblique angle. Try all four handles on desktop and a real phone, keyboard steps, scrolling outside handles, and viewport resizing. Check visible labels and stored normalized points; resizing the UI must not change them.
+3. **Rotation/ratio:** Check 0/90/180/270 degrees, repeated clockwise/counterclockwise steps, and rotation after arbitrary corner adjustments. The preview must rotate once with consistent labels and no mirroring. Test square, portrait, landscape, and custom physical dimensions; verify output ratio within pixel rounding and longest edge 2400. Incorrect dimensions should visibly distort geometry, not be silently ignored.
+4. **Preview/save:** Preview must be visible before saving. Change a corner after preview and confirm Save becomes unavailable until regeneration. Save, reload/reopen, adjust again, and confirm regeneration uses original data. Reset selection and Cancel should retain the saved correction; confirmed Use original should remove all three derived records while preserving imported assets.
+5. **Failures/concurrency:** Test a missing original, unsupported browser format, invalid points, failed worker load (block its script in a disposable profile), and safely simulated quota errors if supported. Prior settings/images/thumbnails must remain intact. Save from two editor tabs and check the second rejects a stale revision. Change physical dimensions in another tab and check stale saving is rejected. Unverifiable quota/device cases should be recorded as unverified.
+6. **Lifecycle:** Navigate Back/Library or reload with adjusted points and with an unsaved preview. Verify discard protection, Stop processing, blocked navigation while saving, and disabled PWA updating. Check cancellation during sampling and repeated preview/close cycles for released URLs/workers and bounded memory growth. Native unload prompts remain best-effort on mobile.
+7. **Gallery/cascades:** Confirm corrected thumbnails/indicators update, original viewing remains available, and drag/keyboard/button reordering does not load originals or refetch unchanged thumbnails. Delete a corrected page/book and confirm all associated records across seven stores are removed atomically; another book must remain untouched.
+8. **Offline/lazy:** Let the production worker finish installation, reload under its control, and switch Offline before first opening a correction route. Direct-load/reload that route, generate/save a correction, return to the gallery, and remove it offline. Verify route and worker chunks are cached application assets while user images remain exclusively in IndexedDB. Restore normal worker settings after any request-blocking checks.
+
+**Geometry aspects that particularly need testing:** In the development app (`npm run dev`), pure helpers can be imported from `/src/features/correction/geometry.ts` and coordinate helpers from `/src/features/correction/correction.ts` in DevTools or a future test harness. Verify identity and forward/inverse corner residuals for rectangles and skewed convex quads; all four rotations and display/inverse-display round trips; bow-tie/concave/reversed/collinear/near-collapse rejection; matrix pivot/singularity and projective-denominator boundaries; and pixel-edge clamping. A 2×2 opaque source should remain identical under full-rectangle 2×2 sampling. With TL red, TR green, BR blue, BL white, a 3×3 full-rectangle output's center should bilinearly average to approximately `(128,128,128)`. Verify the clockwise result starts with original BL at output TL, transparency has no dark fringes, output ratio rounding is correct, and worker/fallback sampling agrees. Also inspect a photographed calibration grid: a planar selection should yield straight rectangular edges, while curvature should remain visibly uncorrected. These are required manual/future test targets, not claims of verified numerical accuracy.
 
 ## Manual production and installation verification
 
@@ -219,10 +290,10 @@ The worker does not run under `npm run dev`; use the production preview for PWA 
 
 ## Known limitations and future milestones
 
-- Milestone 2A.1 has not been compiled, linted, rendered, or browser-tested during delivery. Run the checks above before deployment.
+- Milestone 2B has not been compiled, linted, rendered, mathematically tested, or browser-tested during delivery. Run the checks above before deployment.
 - Library queries refresh when their screens mount, not live across tabs. Concurrent edits use last successful save wins; there is no conflict-resolution UI.
 - No autosave, undo after deletion, backup/import/export, storage-persistence request, or cross-device synchronization. Browser unload prompts are best-effort, especially on mobile.
 - UI copy is English. Stored language tags support a broader future language catalogue.
 - Icons and service-worker output are generated during the production build; validate the generated assets on target devices.
 - Root-origin hosting only in this milestone. A deployment under a subpath needs coordinated Vite base, router, manifest, and worker-scope changes.
-- Future milestones may introduce perspective correction, OCR, AI translation, suitable sticker placement, and printable translated labels/PDFs. None of those features, authentication, cloud services, or a backend are included here.
+- Future milestones may introduce automatic page detection, OCR, AI translation, suitable sticker placement, and printable translated labels/PDFs. None of those features, authentication, cloud services, or a backend are included here.

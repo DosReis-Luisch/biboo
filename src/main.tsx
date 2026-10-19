@@ -31,6 +31,14 @@ const router = createBrowserRouter([{
       },
       errorElement: <RouteErrorPage />,
     },
+    {
+      path: '/books/:bookId/pages/:pageId/correct',
+      lazy: async () => {
+        const { CorrectionPage } = await import('./features/correction/CorrectionPage')
+        return { Component: CorrectionPage }
+      },
+      errorElement: <RouteErrorPage />,
+    },
     { path: '*', element: <NotFoundPage /> },
   ],
 }])

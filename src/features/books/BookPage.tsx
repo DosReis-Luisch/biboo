@@ -84,7 +84,7 @@ function ExistingBook({ id }: { id: string }) {
     <Button color="error" disabled={pagesBusy} startIcon={<DeleteOutlineRounded />} onClick={() => setConfirmDelete(true)} sx={{ alignSelf: 'flex-start' }}>Delete book</Button>
     <Dialog open={confirmDelete} onClose={() => { if (!deleting) setConfirmDelete(false) }} aria-labelledby="delete-title" aria-describedby="delete-description">
       <DialogTitle id="delete-title">Delete this book?</DialogTitle>
-      <DialogContent><DialogContentText id="delete-description">“{book.title}”, all its pages, and their original images and thumbnails will be permanently removed from this device. This cannot be undone.</DialogContentText></DialogContent>
+      <DialogContent><DialogContentText id="delete-description">“{book.title}”, all its pages, original images, thumbnails, and derived corrections will be permanently removed from this device. This cannot be undone.</DialogContentText></DialogContent>
       <DialogActions><Button autoFocus disabled={deleting} onClick={() => setConfirmDelete(false)}>Keep book</Button><Button color="error" disabled={deleting} onClick={() => { void deleteBook() }}>{deleting ? 'Deleting…' : 'Delete book'}</Button></DialogActions>
     </Dialog>
   </Stack>

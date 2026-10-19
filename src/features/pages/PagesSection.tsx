@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type ChangeEvent } from 'react'
 import { useLiveQuery } from 'dexie-react-hooks'
-import { useBlocker, useOutletContext } from 'react-router'
+import { useBlocker, useNavigate, useOutletContext } from 'react-router'
 import Alert from '@mui/material/Alert'
 import Box from '@mui/material/Box'
 import Button from '@mui/material/Button'
@@ -19,7 +19,7 @@ import { PageImage } from './PageImage'
 import { PageGallery } from './PageGallery'
 import { ImageImportError, isQuotaError, pageError, preparePageImage } from './imageImport'
 import { pageRepository } from './pageRepository'
-import { pageRoleLabels, type BookPage, type PageRole } from './page'
+import { pageRoleLabels, type BookPage, type GalleryPage, type PageRole } from './page'
 
 type ImportProgress = { total: number; completed: number; saved: number; filename: string }
 type ImportResult = { saved: number; skipped: number; failures: { filename: string; message: string }[] }
@@ -28,9 +28,10 @@ const formatBytes = (bytes: number) => `${(bytes / 1024 / 1024).toLocaleString(u
 
 export function PagesSection({ bookId, onBusyChange }: { bookId: string; onBusyChange: (busy: boolean) => void }) {
   const [retry, setRetry] = useState(0)
+  const navigate = useNavigate()
   const result = useLiveQuery(async () => {
-    try { return { pages: await pageRepository.list(bookId), error: '' } }
-    catch (reason) { return { pages: [] as BookPage[], error: pageError(reason) } }
+    try { return { pages: await pageRepository.listGallery(bookId), error: '' } }
+    catch (reason) { return { pages: [] as GalleryPage[], error: pageError(reason) } }
   }, [bookId, retry])
   const [busy, setBusy] = useState(false)
   const [dragging, setDragging] = useState(false)
@@ -173,6 +174,7 @@ export function PagesSection({ bookId, onBusyChange }: { bookId: string; onBusyC
   const viewingNumber = pages.findIndex((page) => page.id === viewing?.id) + 1
   const deletingNumber = pages.findIndex((page) => page.id === deleting?.id) + 1
   const lowStorage = storage?.quota !== undefined && storage.usage !== undefined && storage.quota - storage.usage < 50 * 1024 * 1024
+  const correct = (page: BookPage) => { void navigate(`/books/${bookId}/pages/${page.id}/correct`) }
   return <Stack component="section" spacing={2} aria-labelledby="pages-title">
     <Typography variant="h2" id="pages-title">Pages{result && !result.error ? ` (${pages.length})` : ''}</Typography>
     <Typography variant="body2" color="text.secondary">Add photographs in reading order. Originals stay on this device; nothing is uploaded.</Typography>
@@ -209,22 +211,23 @@ export function PagesSection({ bookId, onBusyChange }: { bookId: string; onBusyC
       : pages.length === 0 ? <Typography color="text.secondary">No pages yet. Import photos or take your first page photograph.</Typography>
       : <Stack spacing={1}>
         <Typography variant="body2" color="text.secondary">Drag the Reorder handle to move a page. On touch screens, hold the handle briefly first. With a keyboard, press Space or Enter on the handle, use arrow keys, then press Space or Enter to drop. Escape cancels. Move earlier / Move later also remain available.</Typography>
-        <PageGallery pages={pages} disabled={busy || !!viewing || !!deleting} onView={setViewing} onDelete={setDeleting}
+        <PageGallery pages={pages} disabled={busy || !!viewing || !!deleting} onView={setViewing} onDelete={setDeleting} onCorrect={correct}
           onMove={(page, direction) => { void move(page, direction) }} onReorder={reorder} onDraggingChange={setDragging} />
       </Stack>}
     <Dialog open={!!viewing} onClose={() => setViewing(undefined)} fullWidth maxWidth="lg" aria-labelledby="page-view-title">
       <DialogTitle id="page-view-title">{viewedPage ? `Page ${viewingNumber}` : 'Page unavailable'}</DialogTitle>
       <DialogContent>
         {viewedPage ? <Stack spacing={2}>
+          <Typography variant="body2">Original photograph{viewedPage.correctionRevision ? ' · the gallery shows its corrected thumbnail.' : ''}</Typography>
           <PageImage key={viewedPage.id} pageId={viewedPage.id} original alt={`Full view of page ${viewingNumber}`} />
           <Typography variant="body2" sx={{ overflowWrap: 'anywhere' }}>{viewedPage.originalFilename || 'Camera image'} · {viewedPage.widthPx} × {viewedPage.heightPx} px · {viewedPage.mimeType}</Typography>
         </Stack> : <Typography>This page is no longer available in this book.</Typography>}
       </DialogContent>
-      <DialogActions><Button onClick={() => setViewing(undefined)}>Close</Button></DialogActions>
+      <DialogActions>{viewedPage && <Button onClick={() => correct(viewedPage)}>Correct page</Button>}<Button onClick={() => setViewing(undefined)}>Close</Button></DialogActions>
     </Dialog>
     <Dialog open={!!deleting} onClose={() => { if (!busy) setDeleting(undefined) }} aria-labelledby="page-delete-title" aria-describedby="page-delete-description">
       <DialogTitle id="page-delete-title">{deletingNumber ? `Delete page ${deletingNumber}?` : 'Delete page?'}</DialogTitle>
-      <DialogContent><DialogContentText id="page-delete-description">This permanently removes the page, original image, and thumbnail from this device. The remaining pages will be renumbered. This cannot be undone.</DialogContentText></DialogContent>
+      <DialogContent><DialogContentText id="page-delete-description">This permanently removes the page, original image, thumbnails, and any correction settings and derived images from this device. The remaining pages will be renumbered. This cannot be undone.</DialogContentText></DialogContent>
       <DialogActions><Button autoFocus disabled={busy} onClick={() => setDeleting(undefined)}>Keep page</Button><Button color="error" disabled={busy} onClick={() => { void deletePage() }}>{busy ? 'Deleting…' : 'Delete page'}</Button></DialogActions>
     </Dialog>
     <Dialog open={blocker.state === 'blocked'} onClose={() => { if (blocker.state === 'blocked') blocker.reset() }} aria-labelledby="pages-busy-title">
