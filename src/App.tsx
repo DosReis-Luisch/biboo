@@ -11,6 +11,7 @@ import { Link, Outlet, useNavigation } from 'react-router'
 import AutoStoriesRounded from '@mui/icons-material/AutoStoriesRounded'
 import { pwa } from './app/pwa'
 import { RouteLoading } from './app/RouteLoading'
+import { insecureContextMessage } from './app/secureContext'
 
 export type ShellContext = { setEditing: (value: boolean) => void }
 
@@ -18,11 +19,13 @@ export default function App({ initializing = false }: { initializing?: boolean }
   const navigation = useNavigation()
   const [editing, setEditingState] = useState(false)
   const status = useSyncExternalStore(pwa.subscribe, pwa.getSnapshot)
+  const insecure = globalThis.isSecureContext === false
+  const showStatus = insecure || status.error || status.offlineReady || status.updateAvailable
   const setEditing = useCallback((value: boolean) => {
     pwa.setEditing(value)
     setEditingState(value)
   }, [])
-  useEffect(() => { pwa.start() }, [])
+  useEffect(() => { if (!insecure) pwa.start() }, [insecure])
 
   return (
     <>
@@ -36,18 +39,17 @@ export default function App({ initializing = false }: { initializing?: boolean }
           <Button component={Link} to="/">Library</Button>
         </Toolbar>
       </AppBar>
-      <Container maxWidth="md" component="main" id="main" tabIndex={-1} sx={{ py: { xs: 3, sm: 6 }, minHeight: '75svh' }}>
-        <Stack spacing={2} sx={{ mb: 3 }} aria-live="polite">
+      <Container maxWidth="md" component="main" id="main" tabIndex={-1} sx={{ py: { xs: 2, sm: 6 }, minHeight: '75svh' }}>
+        {showStatus && <Stack spacing={2} sx={{ mb: { xs: 2, sm: 3 } }} aria-live="polite">
+          {insecure && <Alert severity="warning">{insecureContextMessage} PWA installation and offline OCR also require a secure context.</Alert>}
           {status.error && <Alert severity="warning">Offline setup or update could not finish. Connect to the internet and reopen Biboo to try again.</Alert>}
-          {status.offlineReady && !status.updateAvailable && <Alert severity="success">Biboo is ready to use offline on this device.</Alert>}
+          {status.offlineReady && !status.updateAvailable && <Alert severity="success">Your book library is ready to use offline. OCR needs separate language preparation.</Alert>}
           {status.updateAvailable && <Alert severity="info"><Stack spacing={1} sx={{ alignItems: 'flex-start' }}>
             <span>{editing ? 'An update is ready. Save or discard your changes before updating.' : 'A new version of Biboo is ready.'}</span>
             <Button variant="outlined" size="small" disabled={editing} onClick={() => { void pwa.update() }}>Update and reload</Button>
           </Stack></Alert>}
-        </Stack>
-        <Box sx={{ minHeight: 48 }}>
-          {(initializing || navigation.state !== 'idle') && <RouteLoading immediate={initializing} />}
-        </Box>
+        </Stack>}
+        {(initializing || navigation.state !== 'idle') && <RouteLoading immediate={initializing} />}
         {!initializing && <Outlet context={{ setEditing } satisfies ShellContext} />}
       </Container>
       <Container maxWidth="md" component="footer" sx={{ py: 3, borderTop: '1px solid #e0e4da' }}>

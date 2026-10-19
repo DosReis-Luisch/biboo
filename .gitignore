@@ -10,7 +10,18 @@ lerna-debug.log*
 node_modules
 dist
 dist-ssr
+public/ocr-assets/
 *.local
+
+# Local TLS certificates, private keys and exported trust certificates
+.certs/
+*.pem
+*.key
+*.crt
+*.cer
+*.der
+*.p12
+*.pfx
 
 # Editor directories and files
 .vscode/*

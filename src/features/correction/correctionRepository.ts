@@ -1,4 +1,5 @@
 import { database } from '../../data/database'
+import { createId } from '../../app/secureContext'
 import type { PageCorrection, CorrectionDraft, CorrectionResult } from './correction'
 import { outputDimensions, validateCorners } from './geometry'
 
@@ -31,7 +32,7 @@ export const correctionRepository = {
       if (!page || page.bookId !== settings.bookId || !book || !await database.pageOriginals.where(':id').equals(settings.pageId).count()) throw new Error('The original page or book no longer exists.')
       if (book.widthMm !== settings.widthMm || book.heightMm !== settings.heightMm) throw new Error('The physical book dimensions changed. Reopen the editor and preview again.')
       await checkRevision(settings.pageId, expectedRevision)
-      const revision = crypto.randomUUID()
+      const revision = createId()
       const record: PageCorrection = { ...settings, revision, updatedAt: new Date().toISOString() }
       await database.pageCorrections.put(record)
       await database.pageCorrectedImages.put({ pageId: settings.pageId, bookId: settings.bookId, revision, blob: result.image })

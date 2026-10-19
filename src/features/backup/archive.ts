@@ -1,4 +1,5 @@
 import type { FileEntry } from '@zip.js/zip.js'
+import { SecureContextError } from '../../app/secureContext'
 import { ArchiveError, assertArchive, checkAbort, limits, manifestAssets, type ArchiveBundle, type BackupProgress } from './format'
 import { parseManifest } from './validation'
 
@@ -139,6 +140,7 @@ function quotaFailure(reason: unknown, depth = 0): boolean {
 }
 
 export function backupError(reason: unknown, restoring: boolean): string {
+  if (reason instanceof SecureContextError) return `${reason.message}${restoring ? ' No book was imported.' : ''}`
   if (reason instanceof ArchiveError) return `${reason.message}${restoring ? ' No book was imported.' : ''}`
   if (quotaFailure(reason)) {
     return restoring ? 'Device storage is full. Free space and retry. No partial restored book was saved.' : 'Not enough browser storage to prepare this backup. Free space and retry. Your saved book was not changed.'

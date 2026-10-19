@@ -4,6 +4,9 @@
   "version": "0.0.0",
   "type": "module",
   "scripts": {
+    "prepare:ocr": "node scripts/prepare-ocr-assets.mjs",
+    "predev": "npm run prepare:ocr",
+    "prebuild": "npm run prepare:ocr",
     "dev": "vite",
     "build": "tsc -b && vite build",
     "lint": "eslint .",
@@ -20,12 +23,15 @@
     "@emotion/styled": "^11.14.1",
     "@mui/icons-material": "^9.5.0",
     "@mui/material": "^9.5.0",
+    "@tesseract.js-data/nld": "^1.0.0",
+    "@tesseract.js-data/por": "^1.0.0",
     "@zip.js/zip.js": "^2.24.0",
     "dexie": "^4.4.6",
     "dexie-react-hooks": "^4.4.0",
     "react": "^19.2.8",
     "react-dom": "^19.2.8",
-    "react-router": "^7.18.4"
+    "react-router": "^7.18.4",
+    "tesseract.js": "^7.0.0"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",

@@ -1,4 +1,5 @@
 import type { PreparedPageImage } from './page'
+import { SecureContextError } from '../../app/secureContext'
 
 const MAX_FILE_BYTES = 50 * 1024 * 1024
 const MAX_PIXELS = 60_000_000
@@ -67,6 +68,7 @@ export function isQuotaError(reason: unknown): boolean {
 }
 
 export function pageError(reason: unknown): string {
+  if (reason instanceof SecureContextError) return reason.message
   if (isQuotaError(reason)) return 'Device storage is full. Free some space before importing more pages. Previously saved pages are safe.'
   if (reason instanceof ImageImportError) return reason.message
   if (reason instanceof Error && reason.name === 'Error') return reason.message

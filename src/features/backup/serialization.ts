@@ -1,4 +1,5 @@
 import type { BookPage, PageAsset } from '../pages/page'
+import { createId } from '../../app/secureContext'
 import type { CorrectedAsset, PageCorrection } from '../correction/correction'
 import { ARCHIVE_FORMAT, ARCHIVE_VERSION, assertArchive, assetPath, limits, manifestAssets, type ArchiveAsset, type ArchiveBundle, type ArchivePage, type BookSnapshot } from './format'
 import { parseManifest } from './validation'
@@ -55,7 +56,7 @@ export function restoredRecords(bundle: ArchiveBundle) {
     bytes += blob.size
   }
   assertArchive(bytes <= limits.totalBytes, 'The restored book exceeds the image-data limit.')
-  const book = { ...manifest.book, id: crypto.randomUUID() }
+  const book = { ...manifest.book, id: createId() }
   const pages: BookPage[] = [], originals: PageAsset[] = [], thumbnails: PageAsset[] = []
   const corrections: PageCorrection[] = [], correctedImages: CorrectedAsset[] = [], correctedThumbnails: CorrectedAsset[] = []
   // References are retained as Blobs; bytes are never decoded or regenerated.
@@ -65,12 +66,12 @@ export function restoredRecords(bundle: ArchiveBundle) {
     return blob
   }
   for (const row of manifest.pages) {
-    const pageId = crypto.randomUUID()
+    const pageId = createId()
     pages.push({ ...row.page, id: pageId, bookId: book.id })
     originals.push({ pageId, bookId: book.id, blob: blobAt(row.original) })
     thumbnails.push({ pageId, bookId: book.id, blob: blobAt(row.thumbnail) })
     if (row.correction) {
-      const revision = crypto.randomUUID()
+      const revision = createId()
       corrections.push({ ...row.correction.settings, pageId, bookId: book.id, revision })
       correctedImages.push({ pageId, bookId: book.id, revision, blob: blobAt(row.correction.image) })
       correctedThumbnails.push({ pageId, bookId: book.id, revision, blob: blobAt(row.correction.thumbnail) })

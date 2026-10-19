@@ -1,5 +1,6 @@
 import Dexie from 'dexie'
 import { database } from '../../data/database'
+import { createId } from '../../app/secureContext'
 import type { BookPage, GalleryPage, PageRole, PreparedPageImage } from './page'
 
 function orderedPages(bookId: string) {
@@ -25,6 +26,7 @@ export const pageRepository = {
   },
 
   async add(bookId: string, image: PreparedPageImage, role: PageRole): Promise<BookPage> {
+    const id = createId()
     // Decode/thumbnail work must finish BEFORE opening an IndexedDB transaction.
     return database.transaction(
       'rw', [database.books, database.pages, database.pageOriginals, database.pageThumbnails],
@@ -32,7 +34,7 @@ export const pageRepository = {
         if (!await database.books.get(bookId)) throw new Error('The book was deleted. Return to your library.')
         const last = await orderedPages(bookId).last()
         const page: BookPage = {
-          id: crypto.randomUUID(), bookId, readingOrder: (last?.readingOrder ?? 0) + 1,
+          id, bookId, readingOrder: (last?.readingOrder ?? 0) + 1,
           createdAt: new Date().toISOString(), originalFilename: image.originalFilename,
           widthPx: image.widthPx, heightPx: image.heightPx, mimeType: image.mimeType, role,
         }

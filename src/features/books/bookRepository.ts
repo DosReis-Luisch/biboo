@@ -1,4 +1,6 @@
 import { database } from '../../data/database'
+import Dexie from 'dexie'
+import { createId, SecureContextError } from '../../app/secureContext'
 import { validateBook, type Book, type BookInput } from './book'
 
 function cleanInput(input: BookInput): BookInput {
@@ -17,7 +19,7 @@ export const bookRepository = {
   async create(input: BookInput): Promise<Book> {
     const values = cleanInput(input)
     const timestamp = new Date().toISOString()
-    const book: Book = { ...values, id: crypto.randomUUID(), createdAt: timestamp, updatedAt: timestamp }
+    const book: Book = { ...values, id: createId(), createdAt: timestamp, updatedAt: timestamp }
     await database.books.add(book)
     return book
   },
@@ -46,11 +48,14 @@ export const bookRepository = {
 }
 
 export function storageError(error: unknown): string {
+  if (error instanceof SecureContextError) return error.message
   if (error instanceof Error) {
     if (error.name === 'QuotaExceededError') return 'Your device storage is full. Free some space and try again.'
     if (error.name === 'MissingAPIError' || error.name === 'SecurityError') {
       return 'Local storage is unavailable. Allow site storage or open Biboo outside private browsing.'
     }
+    if (error instanceof Dexie.DexieError) return 'Biboo could not access your local library. Check that site storage is allowed and try again. Your changes have not been saved.'
+    if (error.name === 'Error') return error.message
   }
-  return 'Biboo could not access your local library. Check that site storage is allowed and try again. Your changes have not been saved.'
+  return 'Biboo could not complete this operation. Try again or use an up-to-date browser. Your changes have not been saved.'
 }

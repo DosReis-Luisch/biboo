@@ -22,12 +22,13 @@ type GalleryProps = {
   onView: (page: BookPage) => void
   onDelete: (page: BookPage) => void
   onCorrect: (page: BookPage) => void
+  onRecognize: (page: BookPage) => void
   onMove: (page: BookPage, direction: -1 | 1) => void
   onReorder: (pageIds: string[]) => Promise<void>
   onDraggingChange: (dragging: boolean) => void
 }
 
-export function PageGallery({ pages, disabled, onView, onDelete, onCorrect, onMove, onReorder, onDraggingChange }: GalleryProps) {
+export function PageGallery({ pages, disabled, onView, onDelete, onCorrect, onRecognize, onMove, onReorder, onDraggingChange }: GalleryProps) {
   const sensors = useSensors(
     useSensor(MouseSensor, { activationConstraint: { distance: 8 } }),
     useSensor(TouchSensor, { activationConstraint: { delay: 250, tolerance: 8 } }),
@@ -82,15 +83,16 @@ export function PageGallery({ pages, disabled, onView, onDelete, onCorrect, onMo
           onView={() => { if (!suppressActions.current) onView(page) }}
           onDelete={() => { if (!suppressActions.current) onDelete(page) }}
           onCorrect={() => { if (!suppressActions.current) onCorrect(page) }}
+          onRecognize={() => { if (!suppressActions.current) onRecognize(page) }}
           onMove={(direction) => { if (!suppressActions.current) onMove(page, direction) }} />)}
       </Box>
     </SortableContext>
   </DndContext>
 }
 
-function SortablePageCard({ page, index, count, disabled, onView, onDelete, onCorrect, onMove }: {
+function SortablePageCard({ page, index, count, disabled, onView, onDelete, onCorrect, onRecognize, onMove }: {
   page: GalleryPage; index: number; count: number; disabled: boolean
-  onView: () => void; onDelete: () => void; onCorrect: () => void; onMove: (direction: -1 | 1) => void
+  onView: () => void; onDelete: () => void; onCorrect: () => void; onRecognize: () => void; onMove: (direction: -1 | 1) => void
 }) {
   const { attributes, listeners, setNodeRef, setActivatorNodeRef, transform, transition, isDragging, isSorting, isOver } = useSortable({ id: page.id, disabled })
   const controlsDisabled = disabled || isSorting
@@ -120,6 +122,7 @@ function SortablePageCard({ page, index, count, disabled, onView, onDelete, onCo
       {page.correctionRevision && <Typography variant="caption" color="primary">Correction applied · original preserved</Typography>}
       <Stack direction="row" spacing={0.5} useFlexGap sx={{ flexWrap: 'wrap', mt: 1 }}>
         <Button size="small" disabled={controlsDisabled} onClick={onCorrect} aria-label={`Correct page ${index + 1}`}>Correct page</Button>
+        <Button size="small" disabled={controlsDisabled} onClick={onRecognize} aria-label={`Recognize text on page ${index + 1}`}>Recognize text</Button>
         <Button size="small" disabled={controlsDisabled || index === 0} onClick={() => onMove(-1)} aria-label={`Move page ${index + 1} earlier`}>Move earlier</Button>
         <Button size="small" disabled={controlsDisabled || index === count - 1} onClick={() => onMove(1)} aria-label={`Move page ${index + 1} later`}>Move later</Button>
         <Button size="small" color="error" disabled={controlsDisabled} onClick={onDelete} aria-label={`Delete page ${index + 1}`}>Delete page</Button>

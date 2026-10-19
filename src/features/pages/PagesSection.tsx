@@ -175,6 +175,7 @@ export function PagesSection({ bookId, onBusyChange }: { bookId: string; onBusyC
   const deletingNumber = pages.findIndex((page) => page.id === deleting?.id) + 1
   const lowStorage = storage?.quota !== undefined && storage.usage !== undefined && storage.quota - storage.usage < 50 * 1024 * 1024
   const correct = (page: BookPage) => { void navigate(`/books/${bookId}/pages/${page.id}/correct`) }
+  const recognize = (page: BookPage) => { void navigate(`/books/${bookId}/pages/${page.id}/ocr`) }
   return <Stack component="section" spacing={2} aria-labelledby="pages-title">
     <Typography variant="h2" id="pages-title">Pages{result && !result.error ? ` (${pages.length})` : ''}</Typography>
     <Typography variant="body2" color="text.secondary">Add photographs in reading order. Originals stay on this device; nothing is uploaded.</Typography>
@@ -211,7 +212,7 @@ export function PagesSection({ bookId, onBusyChange }: { bookId: string; onBusyC
       : pages.length === 0 ? <Typography color="text.secondary">No pages yet. Import photos or take your first page photograph.</Typography>
       : <Stack spacing={1}>
         <Typography variant="body2" color="text.secondary">Drag the Reorder handle to move a page. On touch screens, hold the handle briefly first. With a keyboard, press Space or Enter on the handle, use arrow keys, then press Space or Enter to drop. Escape cancels. Move earlier / Move later also remain available.</Typography>
-        <PageGallery pages={pages} disabled={busy || !!viewing || !!deleting} onView={setViewing} onDelete={setDeleting} onCorrect={correct}
+        <PageGallery pages={pages} disabled={busy || !!viewing || !!deleting} onView={setViewing} onDelete={setDeleting} onCorrect={correct} onRecognize={recognize}
           onMove={(page, direction) => { void move(page, direction) }} onReorder={reorder} onDraggingChange={setDragging} />
       </Stack>}
     <Dialog open={!!viewing} onClose={() => setViewing(undefined)} fullWidth maxWidth="lg" aria-labelledby="page-view-title">
