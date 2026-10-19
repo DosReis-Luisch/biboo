@@ -30,7 +30,10 @@ export function LibraryPage() {
   return <Stack spacing={4}>
     <Stack direction={{ xs: 'column', sm: 'row' }} sx={{ justifyContent: 'space-between', alignItems: { xs: 'flex-start', sm: 'center' }, gap: 2 }}>
       <Box><Typography variant="overline" color="secondary">A little library. A world of stories.</Typography><Typography variant="h1">Your books</Typography><Typography color="text.secondary" sx={{ mt: 1 }}>Make room for stories in both your languages.</Typography></Box>
-      <Button component={Link} to="/books/new" variant="contained" startIcon={<AddRounded />}>Create book</Button>
+      <Stack spacing={1} sx={{ flexShrink: 0 }}>
+        <Button component={Link} to="/books/new" variant="contained" startIcon={<AddRounded />}>Create book</Button>
+        <Button component={Link} to="/backup/import" variant="outlined">Import Biboo backup</Button>
+      </Stack>
     </Stack>
     {error ? <Alert severity="error" action={<Button color="inherit" onClick={() => { setError(''); setBooks(undefined); setAttempt((value) => value + 1) }}>Retry</Button>}>{error}</Alert>
       : !books ? <Box role="status"><CircularProgress size={28} aria-label="Loading library" /><Typography>Opening your library…</Typography></Box>

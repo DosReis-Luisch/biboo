@@ -81,6 +81,7 @@ function ExistingBook({ id }: { id: string }) {
       </Stack>
     </Paper>
     <PagesSection bookId={id} onBusyChange={setPagesBusy} />
+    <Button component={Link} to={`/books/${id}/backup`} variant="outlined" disabled={pagesBusy || deleting} sx={{ alignSelf: 'flex-start' }}>Export book</Button>
     <Button color="error" disabled={pagesBusy} startIcon={<DeleteOutlineRounded />} onClick={() => setConfirmDelete(true)} sx={{ alignSelf: 'flex-start' }}>Delete book</Button>
     <Dialog open={confirmDelete} onClose={() => { if (!deleting) setConfirmDelete(false) }} aria-labelledby="delete-title" aria-describedby="delete-description">
       <DialogTitle id="delete-title">Delete this book?</DialogTitle>

@@ -39,6 +39,22 @@ const router = createBrowserRouter([{
       },
       errorElement: <RouteErrorPage />,
     },
+    {
+      path: '/backup/import',
+      lazy: async () => {
+        const { BackupPage } = await import('./features/backup/BackupPage')
+        return { Component: BackupPage }
+      },
+      errorElement: <RouteErrorPage />,
+    },
+    {
+      path: '/books/:bookId/backup',
+      lazy: async () => {
+        const { BackupPage } = await import('./features/backup/BackupPage')
+        return { Component: BackupPage }
+      },
+      errorElement: <RouteErrorPage />,
+    },
     { path: '*', element: <NotFoundPage /> },
   ],
 }])

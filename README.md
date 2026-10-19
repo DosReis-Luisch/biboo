@@ -2,11 +2,11 @@
 
 Biboo is a local-first Progressive Web Application for bilingual families. It provides an installable, offline-capable book library: create a book, choose its languages, set page dimensions, and add photographs of its pages. Milestone 2A adds local file/camera import, thumbnails, larger viewing, reading-order management, and page deletion.
 
-All metadata, original images, and thumbnails stay on the device. Milestone 2B adds manual, non-destructive four-corner perspective correction. OCR, translation, sticker positioning, printable labels, and PDFs are future work.
+All metadata, original images, and thumbnails stay on the device. Milestone 2B adds manual, non-destructive four-corner perspective correction; Milestone 3 adds portable `.biboo` book backup and restore. OCR, translation, sticker positioning, printable labels, and PDFs are future work.
 
 ## Stack
 
-Uses the existing dependencies without version changes: React 19, TypeScript 6, Vite 8, MUI 9 with Emotion, React Router 7, Dexie 4, vite-plugin-pwa 2, Workbox, and @vite-pwa/assets-generator 2. No backend, accounts, telemetry, external fonts, or paid services.
+Uses the existing dependencies: React 19, TypeScript 6, Vite 8, MUI 9 with Emotion, React Router 7, Dexie 4, dnd-kit, vite-plugin-pwa 2, Workbox, @vite-pwa/assets-generator 2, and the already installed @zip.js/zip.js 2.24 for portable archives. No backend, accounts, telemetry, external fonts, or paid services.
 
 ## Development commands
 
@@ -21,7 +21,7 @@ npm run preview -- --host 127.0.0.1 --port 4173
 
 Development runs on the URL printed by Vite. The development server intentionally does not register a service worker. `build` runs the TypeScript project build, bundles the application, generates installation assets and the manifest, and produces the service worker in `dist`. `preview` serves that production output for local inspection; it is not a production hosting service.
 
-Milestone 2B has not been built, linted, or browser-tested during implementation. Run the manual checks below; no successful execution is claimed for these changes.
+Milestone 3 has not been built, linted, or browser-tested during implementation. Run the manual checks below; no successful execution is claimed for these changes.
 
 ## Source structure
 
@@ -30,6 +30,7 @@ Milestone 2B has not been built, linted, or browser-tested during implementation
 - `src/features/books/`: book types, validation, language and dimension catalogues, repository, library, detail, and editor screens.
 - `src/features/pages/`: page/asset types, transactional repository, browser image preparation, reactive page gallery, and image URL lifecycle.
 - `src/features/correction/`: separately lazy-loaded correction editor, normalized-coordinate conventions, pure projective geometry/pixel sampling, worker, and transactional correction persistence.
+- `src/features/backup/`: lazy backup screens, versioned manifest types/validation, pure serialization/remapping, consistent snapshots/atomic restores, and dynamically imported ZIP handling.
 - `src/data/database.ts`: typed Dexie schema and database version.
 - `src/main.tsx`: theme and React Router routes.
 - `public/biboo.svg`: original book-mark icon and source for generated installation assets.
@@ -93,7 +94,7 @@ Creates use `crypto.randomUUID()` and canonical BCP 47 language tags. Edits pres
 
 Defaults are Dutch (Netherlands), `nl-NL`, and Portuguese (Portugal), `pt-PT`. A small language catalogue can be extended without schema changes. Titles are required and limited to 200 characters; each dimension must be a finite value from 1 to 2,000 mm, including decimal measurements. Presets include A5, A4, small and standard square books, and a landscape picture book. Measurements always describe one page. Width and height can be swapped or entered directly.
 
-Records survive reloads and application updates on the same origin and browser profile. Browser storage can still be evicted; clearing site data, uninstall behavior, private browsing, or changing browser/origin can remove or isolate the library. There is no backup/export yet. Storage failures are surfaced in the UI; failed saves retain the form values for retry. Forms save only after explicit submission. Delete requires confirmation.
+Records survive reloads and application updates on the same origin and browser profile. Browser storage can still be evicted; clearing site data, uninstall behavior, private browsing, or changing browser/origin can remove or isolate the library. Milestone 3 provides portable `.biboo` backups; download and retain them outside browser storage. Storage failures are surfaced in the UI; failed saves retain the form values for retry. Forms save only after explicit submission. Delete requires confirmation.
 
 ## Page capture and local storage (Milestone 2A)
 
@@ -166,7 +167,7 @@ Progress reports files processed and pages saved. Invalid images fail independen
 
 While saving/importing, book edits/deletion and other page mutations are disabled. Router navigation waits for the operation to finish; tab close/reload uses native unload protection where available. PWA updating is disabled during these operations as well. An abrupt browser/process shutdown can abort the current page transaction, but cannot roll back earlier successful imports. Mobile unload protection is best-effort.
 
-Where supported, `navigator.storage.estimate()` displays approximate site usage/quota and warns below 50 MiB estimated headroom or when selected originals appear to exceed headroom. Estimates are advisory and shared with other storage for this origin; actual quota errors still govern each transaction. There is no permanent-storage guarantee, persistence permission request, backup/export, or cloud copy. Keep source photos elsewhere.
+Where supported, `navigator.storage.estimate()` displays approximate site usage/quota and warns below 50 MiB estimated headroom or when selected originals appear to exceed headroom. Estimates are advisory and shared with other storage for this origin; actual quota errors still govern each transaction. There is no permanent-storage guarantee, persistence permission request, or cloud copy. Keep source photos and downloaded `.biboo` backups elsewhere.
 
 ### Manual verification for Milestone 2A
 
@@ -213,7 +214,7 @@ The gallery prefers the corrected thumbnail and labels corrected pages. Clicking
 
 Settings, corrected image, and corrected thumbnail are saved in one transaction after processing/encoding finishes. Neither `pageOriginals` nor imported thumbnails are written by correction code. Quota, processing, or revision failures preserve the entire prior correction. Saving checks that the parent/page/original still exist, that physical book dimensions have not changed, and that the loaded correction revision is still current. Concurrent edits/removals in another tab are rejected instead of silently overwriting them. Reopen the editor after such a conflict or after physical dimensions change. Existing corrections are not automatically regenerated when a book's size changes; the editor warns and uses the current book ratio for its next preview.
 
-Page deletion and book deletion include all derived stores in their existing cascade transactions. Removing a correction also validates its loaded revision. Close older Biboo tabs when upgrading the database schema. There is no backup/export or permanent-storage guarantee.
+Page deletion and book deletion include all derived stores in their existing cascade transactions. Removing a correction also validates its loaded revision. Close older Biboo tabs when upgrading the database schema. Portable backups are available in Milestone 3; browser storage still has no permanence guarantee.
 
 ### Projective geometry and coordinate conventions
 
@@ -263,6 +264,57 @@ npm run preview -- --host 127.0.0.1 --port 4173
 
 **Geometry aspects that particularly need testing:** In the development app (`npm run dev`), pure helpers can be imported from `/src/features/correction/geometry.ts` and coordinate helpers from `/src/features/correction/correction.ts` in DevTools or a future test harness. Verify identity and forward/inverse corner residuals for rectangles and skewed convex quads; all four rotations and display/inverse-display round trips; bow-tie/concave/reversed/collinear/near-collapse rejection; matrix pivot/singularity and projective-denominator boundaries; and pixel-edge clamping. A 2×2 opaque source should remain identical under full-rectangle 2×2 sampling. With TL red, TR green, BR blue, BL white, a 3×3 full-rectangle output's center should bilinearly average to approximately `(128,128,128)`. Verify the clockwise result starts with original BL at output TL, transparency has no dark fringes, output ratio rounding is correct, and worker/fallback sampling agrees. Also inspect a photographed calibration grid: a planar selection should yield straight rectangular edges, while curvature should remain visibly uncorrected. These are required manual/future test targets, not claims of verified numerical accuracy.
 
+## Portable book backup and restore (Milestone 3)
+
+From an existing book, choose **Export book**, then **Create .biboo backup**. The read-only snapshot includes the complete book, ordered pages, original images, imported thumbnails, correction settings, and both derived image types. After packaging finishes, tap **Download .biboo file**. This explicit tap supports mobile browser download/share behavior better than an automatic download after a long asynchronous operation. Check the browser's Downloads/Files location; Biboo cannot confirm that the file was actually saved. The generated in-memory download is released when this screen closes or another export starts.
+
+In the library, choose **Import Biboo backup**, select a `.biboo` file, and choose **Restore as a separate book**. Restore preserves the title and relevant metadata, so two separate library entries can have the same title. Use **Open restored book** to identify the new copy. Each restore gives the book/pages fresh IDs and correction settings/assets a fresh matching revision. Repeating restore deliberately creates another independent copy; it never merges with, replaces, or clears an existing book.
+
+**Archives contain original book images, may contain camera/EXIF metadata, and are not encrypted.** Store/share downloaded files accordingly. Everything is processed on-device without network services or image re-encoding. There is no background synchronization or automatic backup.
+
+### Format, validation, and transactions
+
+The format is a ZIP with `manifest.json`, identifier `biboo-book`, archive version `1`, complete book/page metadata, and explicit image references under `pages/<page-id>/{original,thumbnail,corrected,corrected-thumbnail}`. Correction entries are present only as a complete settings/image/thumbnail triple. MIME types and byte lengths are preserved explicitly; photographs are stored unchanged with ZIP STORE and never base64-embedded. Archive version 1 is independent of the existing Dexie schema version 3; no database upgrade is introduced.
+
+See [the version 1 archive specification](docs/biboo-archive-v1.md) for a full manifest example, fields, coordinate conventions, paths, limits, and restore mapping rules.
+
+Export reads all seven stores in a single read-only IndexedDB transaction, then validates relationships/assets and creates the ZIP outside that transaction. A concurrent edit cannot create a mixture of record versions in the snapshot. Missing or orphaned local assets stop export rather than silently dropping part of the project. The saved project is unchanged.
+
+Import validates manifest shape/version, UUID uniqueness, language tags, timestamps, dimensions, ordered page ownership, correction geometry and revisions, canonical paths, exact referenced entry membership, MIME metadata, byte lengths, CRC checksums, strict local/central ZIP structure agreement, and actual stream output limits. It rejects missing/extra/duplicate files, directory/link/executable/special/encrypted entries, unsafe or ambiguous paths, unsupported compression, malformed metadata, truncated streams, and decompression/checksum failures. Image internals are not decoded during validation: receiving browsers can retain originals they cannot display (for example HEIC on a browser without HEIC support).
+
+Only after validation and extraction succeed does one transaction `add`/`bulkAdd` the remapped project into all seven existing stores. Failure rolls back the whole addition. There are no temporary partially imported records. Cancel is available before the final database write; once committing, wait until it finishes. Native unload protection and router/PWA-update guards protect active operations where supported. An abrupt browser shutdown can leave either the entire restored book or none, never an intentionally partial restore; inspect the library before retrying if completion was not reported.
+
+### Memory, offline behavior, and limitations
+
+The already installed `@zip.js/zip.js` dependency is imported dynamically only when an operation starts, within the separate lazy backup feature. Its native/JS codec entry is configured without ZIP web workers or an external WASM download. Blob readers/writers and bounded writable streams process one asset at a time, with no bitmap decoding or full-project `ArrayBuffer`. Existing Workbox JavaScript precaching includes emitted backup/ZIP chunks. Direct `/backup/import` and `/books/:bookId/backup` routes have application-shell fallback. Downloads/archives and imported images are never service-worker-cached.
+
+This is **not** constant-memory or direct-to-disk streaming: export retains the snapshot's Blob references and final ZIP Blob, and restore collects validated image Blobs before the atomic write. ZIP buffers, per-entry chunk copies, Blob backing storage, IndexedDB cloning, and browser download handling can substantially exceed the project size. Current safeguards are 500 pages, 2001 entries, 2 MiB manifest, 64 MiB per image, 256 MiB total expanded data, and 300 MiB archive file size. These are caps, not a guarantee of success on mobile. A native read/snapshot or ZIP finalization step may take time to settle after cancel. Very large books require a future streaming/staging design or smaller separately managed projects; automatic archive splitting is not implemented.
+
+Modern browser Blob/Web Streams, typed arrays, UTF-8 decoding, and local download support are required. Native compression streams are preferred with zip.js's JS codec fallback; only ZIP methods STORE/DEFLATE are accepted. iOS/Safari may open a share/save sheet or limit large Blob downloads; use its Files/Downloads UI and verify the file was retained. Image/EXIF decoding limitations remain those of the existing viewer/editor. Byte/MIME/CRC validation does not prove a correctly checksummed image is internally decodable, nor provide cryptographic authenticity. Device/browser memory exhaustion may terminate a tab without a recoverable error. Keep original photos and backups safely outside the browser.
+
+### Recovery and manual verification
+
+If restore fails, keep the original `.biboo` file and existing library. Free site/device space if quota is reported, close other heavy tabs if memory is tight, and retry. An invalid or unsupported archive is not partially restored; do not clear site data to fix it. If the file is damaged, re-export from the source device when available. There is no automatic archive repair. You can inspect a copy with a trusted local ZIP tool, but manually repacking files can introduce unsupported paths/directory entries or invalidate metadata. If a browser closed during the final write, check for the complete new book before restoring again to avoid creating another copy. Never delete the source book until the downloaded archive has been restored and checked.
+
+No build, lint, tests, or browser verification were run for Milestone 3. Run manually:
+
+```powershell
+Set-Location C:\workspace\active-projects\biboo
+npm run lint
+npm run build
+Get-ChildItem .\dist\assets\*.js | Select-Object Name,Length
+Select-String -Path .\dist\sw.js -Pattern 'BackupPage|archive|assets/'
+npm run preview -- --host 127.0.0.1 --port 4173
+```
+
+1. **Primary acceptance:** Create a book with multiple originals, several corrected pages (including rotation), and reordered pages. Export/download it, restore it as a separate book, refresh, and inspect both entries. Confirm all images, imported/corrected thumbnails, roles, dimensions, filenames, languages, timestamps, corner coordinates, rotation, and reading order survive. Verify the restored correction can reopen/re-preview from its restored original. IDs must differ and every derived revision must match its new settings revision. Export must not modify the source book.
+2. **Bytes and independence:** In a disposable profile inspect all seven stores and compare source/restored Blob MIME types, byte lengths, and SHA-256 hashes (read one Blob at a time with developer tools if computing hashes). Revisions should differ; image hashes must not. Edit/delete a restored page/correction and verify the source remains unchanged. Restore the same archive again and confirm it creates another copy.
+3. **Offline/another device:** Let the production PWA finish precaching, reload under worker control, then switch Offline before first visiting backup routes. Export, download, restore, refresh, direct-load both backup routes, and view/edit restored pages offline. Transfer the file manually to another device with Biboo already installed and cached; restore with networking disabled. Cache Storage must contain application chunks only, with user images in IndexedDB.
+4. **Manifest/path failures:** On copies in a disposable profile, try unsupported format/version, invalid JSON, duplicate IDs/revisions, nonconsecutive order, foreign book/page relationships, invalid corners/dimensions, missing images or correction halves, incorrect lengths/MIMEs, extra entries, traversal/absolute/backslash paths, raw-name aliases, duplicate ZIP names, directory/symlink/special/encrypted entries, and unsupported compression. Each must fail before any book is added. Existing books/store counts must remain unchanged.
+5. **Corruption/limits:** Try truncated ZIPs, modified entry bytes (CRC mismatch), inconsistent headers, overlapping entries, excessive page/entry counts, over-limit declared sizes, and decompressed output larger than declared/allowed. Use trusted fixtures and a disposable profile; do not stress your real library. Confirm no partial restored records remain.
+6. **Storage/cancel/downloads:** Where safely supported, simulate quota failure during the final write and confirm all seven-store additions roll back. Cancel extraction/export and try navigation, reload, and a PWA update while busy. The final write disables cancel. Verify keyboard access, progress/error/success announcements, phone layout, and iOS/desktop download behavior. Cancellation and quota cases that cannot safely be exercised should remain recorded as unverified.
+7. **Edge cases/lazy boundary:** Export/restore an empty book, an uncorrected book, unknown but valid language tags, original formats the receiving browser cannot decode, and a correction whose saved physical dimensions differ from the current book. Existing warnings/thumbnail fallback behavior should remain meaningful. Inspect the emitted dependency graph/Network initiators to confirm ZIP is dynamically imported; distinguish service-worker precaching from eager module execution.
+
 ## Manual production and installation verification
 
 From PowerShell:
@@ -290,9 +342,9 @@ The worker does not run under `npm run dev`; use the production preview for PWA 
 
 ## Known limitations and future milestones
 
-- Milestone 2B has not been compiled, linted, rendered, mathematically tested, or browser-tested during delivery. Run the checks above before deployment.
+- Milestone 3 has not been compiled, linted, rendered, or browser-tested during delivery. Run the checks above before deployment.
 - Library queries refresh when their screens mount, not live across tabs. Concurrent edits use last successful save wins; there is no conflict-resolution UI.
-- No autosave, undo after deletion, backup/import/export, storage-persistence request, or cross-device synchronization. Browser unload prompts are best-effort, especially on mobile.
+- No autosave, undo after deletion, storage-persistence request, automatic backups, or background cross-device synchronization. Manual `.biboo` archives provide portable backup/restore. Browser unload prompts are best-effort, especially on mobile.
 - UI copy is English. Stored language tags support a broader future language catalogue.
 - Icons and service-worker output are generated during the production build; validate the generated assets on target devices.
 - Root-origin hosting only in this milestone. A deployment under a subpath needs coordinated Vite base, router, manifest, and worker-scope changes.

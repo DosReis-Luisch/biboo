@@ -31,7 +31,7 @@ export default defineConfig({
       // downloads belong here (public/optional-resources), outside precaching.
       globIgnores: ['optional-resources/**'],
       navigateFallback: 'index.html',
-      navigateFallbackAllowlist: [/^\/$/, /^\/books(?:\/[^/?]+)?\/?$/, /^\/books\/[^/?]+\/pages\/[^/?]+\/correct\/?$/],
+      navigateFallbackAllowlist: [/^\/$/, /^\/books(?:\/[^/?]+)?\/?$/, /^\/books\/[^/?]+\/pages\/[^/?]+\/correct\/?$/, /^\/backup\/import\/?$/, /^\/books\/[^/?]+\/backup\/?$/],
       runtimeCaching: [],
       cleanupOutdatedCaches: true,
       skipWaiting: false,
