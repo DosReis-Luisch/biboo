@@ -4,9 +4,6 @@ import { useBlocker, useOutletContext } from 'react-router'
 import Alert from '@mui/material/Alert'
 import Box from '@mui/material/Box'
 import Button from '@mui/material/Button'
-import Card from '@mui/material/Card'
-import CardActionArea from '@mui/material/CardActionArea'
-import CardContent from '@mui/material/CardContent'
 import Dialog from '@mui/material/Dialog'
 import DialogActions from '@mui/material/DialogActions'
 import DialogContent from '@mui/material/DialogContent'
@@ -19,6 +16,7 @@ import TextField from '@mui/material/TextField'
 import Typography from '@mui/material/Typography'
 import type { ShellContext } from '../../App'
 import { PageImage } from './PageImage'
+import { PageGallery } from './PageGallery'
 import { ImageImportError, isQuotaError, pageError, preparePageImage } from './imageImport'
 import { pageRepository } from './pageRepository'
 import { pageRoleLabels, type BookPage, type PageRole } from './page'
@@ -35,6 +33,7 @@ export function PagesSection({ bookId, onBusyChange }: { bookId: string; onBusyC
     catch (reason) { return { pages: [] as BookPage[], error: pageError(reason) } }
   }, [bookId, retry])
   const [busy, setBusy] = useState(false)
+  const [dragging, setDragging] = useState(false)
   const [progress, setProgress] = useState<ImportProgress>()
   const [report, setReport] = useState<ImportResult>()
   const [error, setError] = useState('')
@@ -49,7 +48,8 @@ export function PagesSection({ bookId, onBusyChange }: { bookId: string; onBusyC
   const stop = useRef(false)
   const mounted = useRef(false)
   const { setEditing } = useOutletContext<ShellContext>()
-  const blocker = useBlocker(busy)
+  const working = busy || dragging
+  const blocker = useBlocker(working)
 
   useEffect(() => {
     mounted.current = true
@@ -57,16 +57,16 @@ export function PagesSection({ bookId, onBusyChange }: { bookId: string; onBusyC
   }, [])
 
   useEffect(() => {
-    onBusyChange(busy)
-    setEditing(busy)
+    onBusyChange(working)
+    setEditing(working)
     const beforeUnload = (event: BeforeUnloadEvent) => { event.preventDefault(); event.returnValue = '' }
-    if (busy) window.addEventListener('beforeunload', beforeUnload)
+    if (working) window.addEventListener('beforeunload', beforeUnload)
     return () => {
       onBusyChange(false)
       setEditing(false)
       window.removeEventListener('beforeunload', beforeUnload)
     }
-  }, [busy, onBusyChange, setEditing])
+  }, [working, onBusyChange, setEditing])
 
   useEffect(() => {
     if (busy) return
@@ -153,6 +153,21 @@ export function PagesSection({ bookId, onBusyChange }: { bookId: string; onBusyC
     finally { finish() }
   }
 
+  async function reorder(pageIds: string[]) {
+    if (!begin()) return
+    setNotice('Saving page order…')
+    try {
+      await pageRepository.reorder(bookId, pageIds)
+      if (mounted.current) setNotice('Page order saved.')
+    } catch (reason) {
+      if (mounted.current) {
+        setNotice('')
+        setError(pageError(reason))
+        setRetry((value) => value + 1)
+      }
+    } finally { finish() }
+  }
+
   const pages = result?.pages ?? []
   const viewedPage = pages.find((page) => page.id === viewing?.id)
   const viewingNumber = pages.findIndex((page) => page.id === viewing?.id) + 1
@@ -162,12 +177,12 @@ export function PagesSection({ bookId, onBusyChange }: { bookId: string; onBusyC
     <Typography variant="h2" id="pages-title">Pages{result && !result.error ? ` (${pages.length})` : ''}</Typography>
     <Typography variant="body2" color="text.secondary">Add photographs in reading order. Originals stay on this device; nothing is uploaded.</Typography>
     <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1.5}>
-      <Button variant="contained" disabled={busy || !result || !!result.error} onClick={() => filesInput.current?.click()}>Import pages</Button>
-      <Button variant="outlined" disabled={busy || !result || !!result.error} onClick={() => cameraInput.current?.click()}>Take a photo</Button>
+      <Button variant="contained" disabled={working || !result || !!result.error} onClick={() => filesInput.current?.click()}>Import pages</Button>
+      <Button variant="outlined" disabled={working || !result || !!result.error} onClick={() => cameraInput.current?.click()}>Take a photo</Button>
     </Stack>
     <input hidden ref={filesInput} type="file" accept="image/*" multiple onChange={selected} aria-label="Choose page images" />
     <input hidden ref={cameraInput} type="file" accept="image/*" capture="environment" onChange={selected} aria-label="Take a page photograph" />
-    <TextField select label="Page type for next import" value={role} disabled={busy} onChange={(event) => setRole(event.target.value as PageRole)} sx={{ maxWidth: 300 }}>
+    <TextField select label="Page type for next import" value={role} disabled={working} onChange={(event) => setRole(event.target.value as PageRole)} sx={{ maxWidth: 300 }}>
       {(Object.keys(pageRoleLabels) as PageRole[]).map((value) => <MenuItem key={value} value={value}>{pageRoleLabels[value]}</MenuItem>)}
     </TextField>
     <Typography variant="caption" color="text.secondary">JPEG, PNG, and other formats your browser can decode. Up to 50 MiB and 60 megapixels per image. Camera support varies; use Import pages if capture is unavailable.</Typography>
@@ -192,22 +207,11 @@ export function PagesSection({ bookId, onBusyChange }: { bookId: string; onBusyC
     {!result ? <Typography role="status">Opening pages…</Typography>
       : result.error ? <Alert severity="error" action={<Button onClick={() => setRetry((value) => value + 1)}>Retry</Button>}>{result.error}</Alert>
       : pages.length === 0 ? <Typography color="text.secondary">No pages yet. Import photos or take your first page photograph.</Typography>
-      : <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: 'repeat(2, 1fr)', md: 'repeat(3, 1fr)' }, gap: 2 }}>
-        {pages.map((page, index) => <Card variant="outlined" key={page.id}>
-          <CardActionArea disabled={busy} onClick={() => setViewing(page)} aria-label={`Open page ${index + 1}`}>
-            <PageImage pageId={page.id} alt={`Thumbnail of page ${index + 1}`} />
-          </CardActionArea>
-          <CardContent>
-            <Typography variant="h3">Page {index + 1}</Typography>
-            <Typography variant="caption" color="text.secondary">{page.role ? pageRoleLabels[page.role] : 'Page'} · {page.widthPx} × {page.heightPx} px</Typography>
-            <Stack spacing={0.5} sx={{ mt: 1 }}>
-              <Button size="small" disabled={busy || index === 0} onClick={() => { void move(page, -1) }} aria-label={`Move page ${index + 1} earlier`}>Move earlier</Button>
-              <Button size="small" disabled={busy || index === pages.length - 1} onClick={() => { void move(page, 1) }} aria-label={`Move page ${index + 1} later`}>Move later</Button>
-              <Button size="small" color="error" disabled={busy} onClick={() => setDeleting(page)} aria-label={`Delete page ${index + 1}`}>Delete page</Button>
-            </Stack>
-          </CardContent>
-        </Card>)}
-      </Box>}
+      : <Stack spacing={1}>
+        <Typography variant="body2" color="text.secondary">Drag the Reorder handle to move a page. On touch screens, hold the handle briefly first. With a keyboard, press Space or Enter on the handle, use arrow keys, then press Space or Enter to drop. Escape cancels. Move earlier / Move later also remain available.</Typography>
+        <PageGallery pages={pages} disabled={busy || !!viewing || !!deleting} onView={setViewing} onDelete={setDeleting}
+          onMove={(page, direction) => { void move(page, direction) }} onReorder={reorder} onDraggingChange={setDragging} />
+      </Stack>}
     <Dialog open={!!viewing} onClose={() => setViewing(undefined)} fullWidth maxWidth="lg" aria-labelledby="page-view-title">
       <DialogTitle id="page-view-title">{viewedPage ? `Page ${viewingNumber}` : 'Page unavailable'}</DialogTitle>
       <DialogContent>
@@ -224,9 +228,9 @@ export function PagesSection({ bookId, onBusyChange }: { bookId: string; onBusyC
       <DialogActions><Button autoFocus disabled={busy} onClick={() => setDeleting(undefined)}>Keep page</Button><Button color="error" disabled={busy} onClick={() => { void deletePage() }}>{busy ? 'Deleting…' : 'Delete page'}</Button></DialogActions>
     </Dialog>
     <Dialog open={blocker.state === 'blocked'} onClose={() => { if (blocker.state === 'blocked') blocker.reset() }} aria-labelledby="pages-busy-title">
-      <DialogTitle id="pages-busy-title">{busy ? 'Saving pages' : 'Pages finished saving'}</DialogTitle>
-      <DialogContent><DialogContentText>{busy ? 'Wait for the current operation to finish before leaving. Choose Stay here to stop an import between images.' : 'You can now continue to the requested page.'}</DialogContentText></DialogContent>
-      <DialogActions><Button autoFocus onClick={() => { if (blocker.state === 'blocked') blocker.reset() }}>Stay here</Button><Button disabled={busy} onClick={() => { if (blocker.state === 'blocked') blocker.proceed() }}>Continue</Button></DialogActions>
+      <DialogTitle id="pages-busy-title">{working ? 'Page operation in progress' : 'Pages finished saving'}</DialogTitle>
+      <DialogContent><DialogContentText>{working ? 'Finish or cancel reordering, or wait for the current save to finish before leaving. Choose Stay here to stop an import between images.' : 'You can now continue to the requested page.'}</DialogContentText></DialogContent>
+      <DialogActions><Button autoFocus onClick={() => { if (blocker.state === 'blocked') blocker.reset() }}>Stay here</Button><Button disabled={working} onClick={() => { if (blocker.state === 'blocked') blocker.proceed() }}>Continue</Button></DialogActions>
     </Dialog>
   </Stack>
 }

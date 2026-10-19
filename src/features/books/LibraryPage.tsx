@@ -41,7 +41,7 @@ export function LibraryPage() {
         <Button component={Link} to="/books/new" variant="contained" startIcon={<AddRounded />}>Add your first book</Button>
       </Paper>
       : <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: 'repeat(2, 1fr)' }, gap: 2 }}>
-        {books.map((book) => <Card variant="outlined" key={book.id}><CardActionArea component={Link} to={`/books/${book.id}`}><CardContent sx={{ p: 3 }}>
+        {books.map((book) => <Card variant="outlined" key={book.id}><CardActionArea component={Link} to={`/books/${book.id}`} sx={{ height: '100%' }}><CardContent sx={{ p: 3 }}>
           <AutoStoriesRounded color="primary" sx={{ mb: 2 }} />
           <Typography variant="h2" sx={{ overflowWrap: 'anywhere', mb: 1 }}>{book.title}</Typography>
           <Typography variant="body2" color="text.secondary">{languageName(book.sourceLanguage)} → {languageName(book.targetLanguage)}</Typography>

@@ -23,7 +23,7 @@ export const PageImage = memo(function PageImage({ pageId, original = false, alt
 
   if (source.error) return <Typography role="status" variant="body2" sx={{ p: 2 }}>{source.error}</Typography>
   if (!source.url) return <Box role="status" sx={{ p: 2 }}>Loading image…</Box>
-  return <Box component="img" src={source.url} alt={alt} loading={original ? 'eager' : 'lazy'} decoding="async"
+  return <Box component="img" src={source.url} alt={alt} draggable={false} loading={original ? 'eager' : 'lazy'} decoding="async"
     onError={() => setSource({ error: 'This browser could not display this image. Try importing a JPEG or PNG version.' })}
-    sx={{ display: 'block', width: '100%', height: original ? 'auto' : 180, maxHeight: original ? '70svh' : undefined, objectFit: 'contain', backgroundColor: '#f1f3e9' }} />
+    sx={{ display: 'block', width: '100%', height: original ? 'auto' : 160, maxHeight: original ? '70svh' : undefined, objectFit: 'contain', backgroundColor: '#f1f3e9' }} />
 })

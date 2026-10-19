@@ -47,6 +47,30 @@ export const pageRepository = {
     })
   },
 
+  reorder(bookId: string, pageIds: readonly string[]) {
+    const requestedIds = [...pageIds]
+    return database.transaction('rw', [database.books, database.pages], async () => {
+      if (!await database.books.get(bookId)) throw new Error('The book was deleted. Return to your library.')
+      if (new Set(requestedIds).size !== requestedIds.length) {
+        throw new Error('The requested order contains duplicate page IDs. Try reordering again.')
+      }
+      const current = await orderedPages(bookId).toArray()
+      const byId = new Map(current.map((page) => [page.id, page]))
+      if (requestedIds.some((id) => !byId.has(id))) {
+        throw new Error('The requested order contains a missing page or a page from another book. Reopen the book and try again.')
+      }
+      if (requestedIds.length !== current.length) {
+        throw new Error('The page list changed or some page IDs are missing. Try reordering the current gallery again.')
+      }
+      // Validate the COMPLETE set before writing, and preserve every other field.
+      await database.pages.bulkPut(requestedIds.map((id, index) => {
+        const page = byId.get(id)
+        if (!page) throw new Error('This page no longer exists. Try reordering again.')
+        return { ...page, readingOrder: index + 1 }
+      }))
+    })
+  },
+
   delete(bookId: string, pageId: string) {
     return database.transaction('rw', [database.pages, database.pageOriginals, database.pageThumbnails], async () => {
       const page = await database.pages.get(pageId)

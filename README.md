@@ -21,7 +21,7 @@ npm run preview -- --host 127.0.0.1 --port 4173
 
 Development runs on the URL printed by Vite. The development server intentionally does not register a service worker. `build` runs the TypeScript project build, bundles the application, generates installation assets and the manifest, and produces the service worker in `dist`. `preview` serves that production output for local inspection; it is not a production hosting service.
 
-Milestone 2A has not been built, linted, or browser-tested during implementation. Run the manual checks below; no successful execution is claimed for these changes.
+Milestone 2A.1 has not been built, linted, or browser-tested during implementation. Run the manual checks below; no successful execution is claimed for these changes.
 
 ## Source structure
 
@@ -98,7 +98,47 @@ Records survive reloads and application updates on the same origin and browser p
 
 Open an existing book's **Pages** section. **Import pages** opens a multiple-file image picker. **Take a photo** uses a standard single-file input with `accept="image/*"` and `capture="environment"`. Browsers decide whether to offer the rear camera, a picker, or a choice; Import pages is always available as the regular-picker fallback. There is no camera stream or custom camera interface. Choose Cover, Interior (default), or Back cover before importing; that role applies to the next selected batch.
 
-Images append in file-selection order, not filename order. The gallery shows the current page count and reading-order numbers, thumbnails, and accessible Move earlier / Move later controls. Open a thumbnail to view the original at a larger size. Page deletion requires confirmation and closes gaps in the remaining reading order. UUID identity remains unchanged when reordering. Deleting a book explicitly confirms removal of all pages and images too. Book timestamps describe edits to book metadata; adding/reordering pages does not rewrite those timestamps.
+Images append in file-selection order, not filename order. The gallery shows the current page count and reading-order numbers, thumbnails, page type, pixel dimensions, a dedicated Reorder handle, Move earlier / Move later controls, and Delete page. Open a thumbnail to view the original at a larger size. Page deletion requires confirmation and closes gaps in the remaining reading order. UUID identity remains unchanged when reordering. Deleting a book explicitly confirms removal of all pages and images too. Book timestamps describe edits to book metadata; adding/reordering pages does not rewrite those timestamps.
+
+### Page gallery layout and sorting (Milestone 2A.1)
+
+The global `MuiCardActionArea` height of `100%` could consume a page card's available height and push its sibling metadata/actions into the clipped area. That theme override is removed. Only library cards, whose entire contents are a single action area, retain a locally scoped full-height action. Page cards use a column layout with a natural-height thumbnail action, a compact 160-pixel image area, and separate content/actions. The page number, type, dimensions, and controls no longer compete with a full-height thumbnail button.
+
+- **Mouse:** Drag the Reorder handle at least 8 pixels to begin. Move over the desired card, including cards in other grid rows, and release.
+- **Touch:** Hold the Reorder handle for 250 ms, then drag. Moving more than 8 pixels before activation cancels that attempt. Only the handle has `touch-action: none`; scroll normally from elsewhere on the card or page. The regular thumbnail remains a viewing action, not a drag activator.
+- **Keyboard:** Tab to a Reorder handle, press Space or Enter to pick up, use arrow keys to move spatially across the grid, then Space or Enter to drop. Escape cancels. Screen-reader instructions and announcements describe pickup, target positions, drop, and cancellation.
+- **Alternatives:** Move earlier / Move later remain available, including on mobile. Boundary moves are disabled. A single-page gallery does not enable dragging.
+
+The existing dnd-kit packages provide MouseSensor, TouchSensor, KeyboardSensor with `sortableKeyboardCoordinates`, `rectSortingStrategy`, and closest-center collision detection. The dragged card receives an outline, elevation, and reduced opacity; the current target has a contrasting outline/background. No drag overlay or full-resolution preview is created: the mounted thumbnail moves, keeping its existing object URL. Native image dragging is disabled. Thumbnail viewing, moving, and deletion are unavailable during a drag, with brief trailing-click suppression on release so dropping over a control cannot trigger it accidentally.
+
+`pageRepository.reorder(bookId, pageIds)` requires exactly the complete current page-ID set for that book. It copies the request, verifies the parent, rejects duplicates, missing/foreign IDs, omitted pages, and a list made stale by concurrent additions/deletions, then writes one-based reading order for the entire result in a single transaction. Other metadata, stable IDs, roles, and both asset stores remain untouched. The existing adjacent-move operation remains available. There is no schema migration for Milestone 2A.1.
+
+During a drag, dnd-kit shows a positional preview. After dropping, the gallery continues to derive its order from the Dexie live query rather than installing an optimistic list. Saving feedback is displayed and other page operations are disabled until the write settles. Failure displays an error and refreshes metadata from storage; no uncommitted order is retained. Depending on storage speed, cards can briefly return to their prior positions before the committed order arrives. Concurrent reorder-only requests use the last committed ordering; a changed page membership is rejected. Canceling a drag makes no database write.
+
+All sorting code is imported by `PagesSection` under the existing lazy book route. The library/shell do not import dnd-kit. Existing application-chunk precaching and image object-URL cleanup remain unchanged; no user image is service-worker-cached.
+
+### Manual verification for Milestone 2A.1
+
+No validation commands were executed during implementation. Run:
+
+```powershell
+Set-Location C:\workspace\active-projects\biboo
+npm run lint
+npm run build
+Get-ChildItem .\dist\assets\*.js | Select-Object Name,Length
+npm run preview -- --host 127.0.0.1 --port 4173
+```
+
+At `http://127.0.0.1:4173`:
+
+1. Use a disposable book with at least seven pages. At phone and desktop widths, confirm every card shows its thumbnail, page number, type, pixel dimensions, Reorder handle, both move buttons, and Delete page. Check portrait, landscape, missing-thumbnail, and one-page cases. Library cards must remain fully clickable.
+2. Drag by mouse within a row and across rows; try first-to-last and last-to-first. Verify active/target feedback, saved confirmation, page numbering, and persistence after reload. A click or movement below the activation distance on a handle must not start sorting or open a viewer.
+3. On a real phone, hold and drag the handle across rows and near the viewport edge. Check normal scrolling outside handles, quick taps/canceled holds, and that releasing over an image or delete button does not open a viewer or delete dialog. Separately verify ordinary thumbnail taps and delete confirmation still work.
+4. With a keyboard, use Space and Enter pickup/drop, arrow keys in both grid directions, and Escape cancellation. Verify focus and screen-reader announcements, then verify Move earlier / Move later. Canceled/no-position-change drags must not alter stored reading order.
+5. Inspect IndexedDB: page IDs, filenames, roles, dimensions, timestamps, and original/thumbnail records must remain unchanged except for metadata `readingOrder`. Repeated drags must not load originals or refetch thumbnail assets merely because their indices changed.
+6. Exercise a failed/stale reorder in a disposable profile (for example, remove or add a page in another tab during a pending request). The transaction must reject a stale membership set and show an error with the actual persisted gallery order. A transaction failure must not leave partially updated numbering.
+7. For explicit repository rejection checks, run `npm run dev` separately and use its printed URL. In that app's DevTools console, import `const { pageRepository } = await import('/src/features/pages/pageRepository.ts')`; obtain a disposable book ID and its current IDs with `await pageRepository.list(bookId)`. Call `reorder` with duplicate IDs, an omitted ID, a nonexistent ID, and an ID from another book, each in an otherwise full list. Each promise must reject without any writes. Re-read `list(bookId)` after each attempt. Use real IDs and a disposable library only.
+8. In the production preview with the normal worker, wait for offline readiness, reload for worker control, switch Offline, and repeat sorting, reload persistence, viewing, and deletion. Confirm the book module remains a dynamic import and no image appears in Cache Storage. Existing PWA update/navigation protection should remain active during a drag or save.
 
 ### Version 2 stores
 
@@ -111,7 +151,7 @@ Images append in file-selection order, not filename order. The gallery shows the
 
 Original images are preserved byte-for-byte as Blobs, with no resizing, compression, base64 encoding, or EXIF stripping. Pixel dimensions are those reported by the browser decoder, which may apply EXIF orientation; encoded-file coordinate interpretation belongs to future geometric processing. Thumbnail generation draws the decoded image to a browser canvas with a maximum 480-pixel longest edge (never upscaling), a white transparency background, and JPEG quality 0.8. The original retains its original format, transparency, and metadata. Animated formats produce a single rendered thumbnail frame.
 
-Decode and thumbnail creation happen outside transactions. Each append atomically saves metadata, original, and thumbnail, checks that the parent still exists, and allocates its order inside a transaction. Reordering swaps adjacent orders transactionally. Page deletion atomically removes both assets and metadata and compacts order. Book deletion atomically removes the book and every matching page/original/thumbnail using indexed book-ID queries. Concurrent append/reorder/delete operations are serialized by IndexedDB transactions; there is no general conflict-resolution UI.
+Decode and thumbnail creation happen outside transactions. Each append atomically saves metadata, original, and thumbnail, checks that the parent still exists, and allocates its order inside a transaction. Move earlier/later swaps adjacent orders transactionally; drag sorting validates and writes the complete order in one transaction. Page deletion atomically removes both assets and metadata and compacts order. Book deletion atomically removes the book and every matching page/original/thumbnail using indexed book-ID queries. Concurrent append/reorder/delete operations are serialized by IndexedDB transactions; there is no general conflict-resolution UI.
 
 ### Performance, offline operation, and failures
 
@@ -179,7 +219,7 @@ The worker does not run under `npm run dev`; use the production preview for PWA 
 
 ## Known limitations and future milestones
 
-- Milestone 2A has not been compiled, linted, rendered, or browser-tested during delivery. Run the checks above before deployment.
+- Milestone 2A.1 has not been compiled, linted, rendered, or browser-tested during delivery. Run the checks above before deployment.
 - Library queries refresh when their screens mount, not live across tabs. Concurrent edits use last successful save wins; there is no conflict-resolution UI.
 - No autosave, undo after deletion, backup/import/export, storage-persistence request, or cross-device synchronization. Browser unload prompts are best-effort, especially on mobile.
 - UI copy is English. Stored language tags support a broader future language catalogue.

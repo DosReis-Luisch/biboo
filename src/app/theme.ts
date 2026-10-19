@@ -20,6 +20,5 @@ export const theme = createTheme({
     MuiButton: { defaultProps: { disableElevation: true }, styleOverrides: { root: { minHeight: 44 } } },
     MuiTextField: { defaultProps: { fullWidth: true } },
     MuiPaper: { styleOverrides: { outlined: { borderColor: '#e0e4da' } } },
-    MuiCardActionArea: { styleOverrides: { root: { height: '100%' } } },
   },
 })
